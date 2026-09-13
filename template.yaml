@@ -57,7 +57,7 @@ Resources:
         Variables:
           CDR_BUCKET_NAME: !Ref CdrBucket
           CREDENTIALS_SECRET_ID: !Ref CredentialsSecretName
-          SSO_URL: "https://sso.pro.gradwell.com"
+          SSO_URL: "https://sso.prod.gradwell.com"
           ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
           SDR_URL: "https://admin.prod.gradwell.com/sdrs"
           DEBUG_SCREENSHOTS: "false"

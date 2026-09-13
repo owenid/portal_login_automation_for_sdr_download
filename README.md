@@ -5,7 +5,7 @@ Gradwell portal, and downloads the SDR CDR file into S3.
 
 ## Flow
 
-1. **SSO login** — navigates to `https://sso.pro.gradwell.com`, fills in the
+1. **SSO login** — navigates to `https://sso.prod.gradwell.com`, fills in the
    username/password fields, and submits the login form.
 2. **Admin section** — clicks the "Admin" option, landing on
    `https://admin.prod.gradwell.com/home`.
@@ -32,7 +32,7 @@ change or redeploy needed:
 
 | Env var                     | Purpose                              | Default                                                  |
 |------------------------------|---------------------------------------|-----------------------------------------------------------|
-| `SSO_URL`                   | SSO login page                        | `https://sso.pro.gradwell.com`                            |
+| `SSO_URL`                   | SSO login page                        | `https://sso.prod.gradwell.com`                           |
 | `ADMIN_HOME_URL`             | Expected URL after choosing Admin     | `https://admin.prod.gradwell.com/home`                    |
 | `SDR_URL`                    | Expected URL after choosing SDR       | `https://admin.prod.gradwell.com/sdrs`                    |
 | `SELECTOR_USERNAME_INPUT`   | Username field on the SSO page        | `input[name="username"], input[type="email"], #username` |
