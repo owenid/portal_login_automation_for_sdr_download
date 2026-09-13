@@ -74,6 +74,12 @@ async function goToSdrSection(page) {
       timeout: config.navigationTimeoutMs,
     });
   }
+
+  // The SDR list loads asynchronously after the page shell renders (a
+  // "Loading SDRs..." spinner is shown first), so wait for network activity
+  // to settle before treating the page as ready — otherwise the list (and
+  // its download controls) may not exist yet.
+  await page.waitForLoadState("networkidle", { timeout: config.navigationTimeoutMs }).catch(() => {});
 }
 
 /**
