@@ -38,9 +38,13 @@ const config = {
     ),
     adminOption: env("SELECTOR_ADMIN_OPTION", 'a:has-text("Admin")'),
     sdrOption: env("SELECTOR_SDR_OPTION", 'a:has-text("SDR")'),
+    // The SDR list is a table (Start Date / End Date / Download columns)
+    // sorted newest-first, with an icon-only download control (no text) in
+    // the last cell of each row. Scoping to the first data row's clickable
+    // control both finds it and picks the latest period.
     downloadButton: env(
       "SELECTOR_DOWNLOAD_BUTTON",
-      'a:has-text("Download"), button:has-text("Download")'
+      "table tbody tr:first-child td:last-child a, table tbody tr:first-child td:last-child button, table tbody tr:first-child a, table tbody tr:first-child button"
     ),
   },
 
