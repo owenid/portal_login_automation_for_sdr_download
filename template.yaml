@@ -21,6 +21,17 @@ Parameters:
       stack does not create or manage the secret's value — populate it
       yourself before (or after) deploying.
 
+  DebugScreenshots:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Set to "true" to upload a screenshot to S3 after every automation
+      step (debug/<run-id>/<step>.png), for tuning selectors. Managed here
+      (rather than via `aws lambda update-function-configuration`) so it
+      survives future `sam deploy` runs instead of being silently reset to
+      the template's default.
+
 Resources:
   CdrBucket:
     Type: AWS::S3::Bucket
@@ -60,7 +71,7 @@ Resources:
           SSO_URL: "https://sso.prod.gradwell.com"
           ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
           SDR_URL: "https://admin.prod.gradwell.com/sdrs"
-          DEBUG_SCREENSHOTS: "false"
+          DEBUG_SCREENSHOTS: !Ref DebugScreenshots
       Policies:
         - S3WritePolicy:
             BucketName: !Ref CdrBucket

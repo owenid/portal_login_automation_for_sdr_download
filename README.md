@@ -45,10 +45,20 @@ change or redeploy needed:
 | `DOWNLOAD_TIMEOUT_MS`       | Timeout waiting for the download to start | `60000`                                               |
 | `DEBUG_SCREENSHOTS`         | `true` to upload a screenshot to S3 after every step (`debug/<run-id>/<step>.png`), for tuning selectors without shell access | `false` |
 
-Set `DEBUG_SCREENSHOTS=true`, trigger a manual invoke, and check the
-`debug/` prefix in the S3 bucket to see exactly what the automation saw at
-each step — that's the fastest way to figure out the real selectors and
-adjust the env vars above.
+`DEBUG_SCREENSHOTS` is set via the `DebugScreenshots` **template
+parameter**, not by editing the Lambda's environment variables directly —
+`sam deploy` resets environment variables to whatever the template says on
+every deploy, so a manual `aws lambda update-function-configuration` change
+gets silently wiped out the next time you deploy. To turn it on:
+
+```bash
+sam deploy --parameter-overrides DebugScreenshots=true
+```
+
+Trigger a manual invoke, then check the `debug/` prefix in the S3 bucket to
+see exactly what the automation saw at each step — that's the fastest way
+to figure out the real selectors and adjust the env vars above. Turn it
+back off the same way (`DebugScreenshots=false`) once you're done tuning.
 
 If the actual login flow is multi-step (e.g. username on one screen, then a
 "Next" button, then password on a second screen — common with SSO
