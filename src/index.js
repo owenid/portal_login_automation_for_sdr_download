@@ -37,8 +37,17 @@ async function loginToSso(page, username, password) {
  * authenticated browser context, so this is a safe fallback).
  */
 async function goToAdminHome(page) {
-  await page.locator(config.selectors.adminOption).first().click();
-  await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
+  // The nav link may sit inside a collapsed/off-screen menu panel (seen on
+  // the real portal: a "MENU" toggle hides the sidebar until clicked), so a
+  // click failure here isn't necessarily fatal — fall back to navigating
+  // directly, which works identically within the same authenticated
+  // session.
+  try {
+    await page.locator(config.selectors.adminOption).first().click({ timeout: config.navigationTimeoutMs });
+    await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
+  } catch (err) {
+    console.warn(`Could not click admin option (${err.message}); falling back to direct navigation`);
+  }
 
   if (!page.url().startsWith(config.adminHomeUrl)) {
     await page.goto(config.adminHomeUrl, {
@@ -52,8 +61,12 @@ async function goToAdminHome(page) {
  * Clicks through to the SDR section, falling back to a direct navigation.
  */
 async function goToSdrSection(page) {
-  await page.locator(config.selectors.sdrOption).first().click();
-  await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
+  try {
+    await page.locator(config.selectors.sdrOption).first().click({ timeout: config.navigationTimeoutMs });
+    await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
+  } catch (err) {
+    console.warn(`Could not click SDR option (${err.message}); falling back to direct navigation`);
+  }
 
   if (!page.url().startsWith(config.sdrUrl)) {
     await page.goto(config.sdrUrl, {
