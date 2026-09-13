@@ -94,6 +94,18 @@ sam deploy --guided
 `sam deploy --guided` will prompt for a stack name and save the answers to
 `samconfig.toml` for future `sam deploy` runs.
 
+### Required: Datadog Forwarder topic ARN
+
+This stack has one required parameter with no default:
+`DatadogForwarderTopicArn` — the ARN of your existing Datadog Forwarder's
+SNS topic (see **Alerting** under Operational notes below). `sam deploy
+--guided` will prompt for it; non-interactive deploys must pass it
+explicitly:
+
+```bash
+sam deploy --parameter-overrides DatadogForwarderTopicArn=arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
+```
+
 ### Credentials secret
 
 This stack does **not** create the credentials secret — it expects one to
@@ -148,11 +160,23 @@ setup.
 - **Timeout/memory**: 180s timeout, 2048 MB memory, 1024 MB of `/tmp`
   ephemeral storage — headless Chromium needs headroom; adjust in
   `template.yaml` if downloads are large or the site is slow.
-- **Failure visibility**: this is a once-a-month job, so a silent failure
-  could go unnoticed for weeks. Consider adding a CloudWatch Alarm on the
-  function's `Errors` metric wired to an SNS topic (email/Slack) — not
-  included here since it wasn't requested, but worth adding given the
-  schedule.
+- **Alerting**: `CdrDownloaderErrorsAlarm` watches the function's `Errors`
+  metric (namespace `AWS/Lambda`) and publishes ALARM/OK state changes to
+  the SNS topic named by `DatadogForwarderTopicArn` — your existing Datadog
+  Forwarder — so a failed run surfaces as a Datadog monitor event rather
+  than sitting silently in CloudWatch Logs. Because this function only
+  runs once a month, the alarm uses a 1-day evaluation period with
+  `TreatMissingData: notBreaching`: a day with no invocation reads as "no
+  data" rather than a false alarm, and only the scheduled run day can
+  actually trip it.
+
+  To test the alarm without waiting for a real failure, invoke the
+  function with bad credentials (or any other guaranteed failure) so it
+  errors, then check the alarm's state:
+
+  ```bash
+  aws cloudwatch describe-alarms --alarm-names <stack-name>-lambda-errors
+  ```
 - **Secrets**: credentials are only ever read at runtime from Secrets
   Manager via the function's IAM role; they are never stored in code,
   environment variables, or the S3 bucket.

@@ -32,6 +32,17 @@ Parameters:
       survives future `sam deploy` runs instead of being silently reset to
       the template's default.
 
+  DatadogForwarderTopicArn:
+    Type: String
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:sns:[a-z0-9-]+:\\d{12}:.+$"
+    ConstraintDescription: Must be a full SNS topic ARN, e.g. arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
+    Description: >
+      ARN of the existing Datadog Forwarder's SNS topic. The CloudWatch
+      alarm on this function's Errors metric publishes its ALARM/OK state
+      changes here so Datadog picks them up as monitor events. This stack
+      does not create or manage that topic — supply its ARN via
+      --parameter-overrides DatadogForwarderTopicArn=<arn>.
+
 Resources:
   CdrBucket:
     Type: AWS::S3::Bucket
@@ -91,6 +102,32 @@ Resources:
             Description: Triggers the CDR download on the 1st of every month
             Enabled: true
 
+  CdrDownloaderErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-lambda-errors"
+      AlarmDescription: >
+        Fires when the monthly CDR download Lambda reports at least one
+        error. The function only runs once a month via schedule, so this
+        uses a 1-day evaluation period with TreatMissingData: notBreaching
+        — a day with no invocation reads as "no data", not an error, and
+        only the scheduled run day can actually trip this alarm.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CdrDownloaderFunction
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref DatadogForwarderTopicArn
+      OKActions:
+        - !Ref DatadogForwarderTopicArn
+
 Outputs:
   CdrBucketName:
     Description: S3 bucket where downloaded CDR files (and debug screenshots) are stored
@@ -103,3 +140,6 @@ Outputs:
   CdrDownloaderFunctionArn:
     Description: Lambda function ARN
     Value: !GetAtt CdrDownloaderFunction.Arn
+  CdrDownloaderErrorsAlarmArn:
+    Description: CloudWatch alarm ARN watching this function's Errors metric
+    Value: !GetAtt CdrDownloaderErrorsAlarm.Arn
