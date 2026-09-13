@@ -3,10 +3,6 @@
 const fs = require("fs");
 const crypto = require("crypto");
 const { chromium: playwright } = require("playwright-core");
-// @sparticuz/chromium ships as an ESM default export even under CJS
-// require(); unwrap it so `chromium.args` / `chromium.executablePath()`
-// work as documented.
-const chromium = require("@sparticuz/chromium").default;
 
 const { config, requireEnv } = require("./config");
 const { getCredentials } = require("./secrets");
@@ -112,6 +108,12 @@ exports.handler = async () => {
   const runId = crypto.randomUUID();
 
   const { username, password } = await getCredentials();
+
+  // @sparticuz/chromium is published as an ES module. Some local Node
+  // versions can require() it transparently via Node's newer require(esm)
+  // interop, but AWS Lambda's nodejs22.x runtime cannot, so it must be
+  // loaded with a dynamic import() instead.
+  const chromium = (await import("@sparticuz/chromium")).default;
 
   let browser;
   let page;
