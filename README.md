@@ -84,12 +84,28 @@ sam deploy --guided
 `sam deploy --guided` will prompt for a stack name and save the answers to
 `samconfig.toml` for future `sam deploy` runs.
 
-After the first deploy, populate the credentials secret (the deploy output
-prints its ARN as `CredentialsSecretArn`):
+### Credentials secret
+
+This stack does **not** create the credentials secret — it expects one to
+already exist in Secrets Manager and only grants the function
+`secretsmanager:GetSecretValue` on it. The secret name defaults to
+`prod/AdminPortal/Gradwell` (the `CredentialsSecretName` template
+parameter); override it at deploy time if yours is named differently:
 
 ```bash
+sam deploy --parameter-overrides CredentialsSecretName=prod/AdminPortal/Gradwell
+```
+
+Create/populate the secret yourself, as type **"Other type of secret"**,
+with exactly two key/value pairs:
+
+```bash
+aws secretsmanager create-secret \
+  --name prod/AdminPortal/Gradwell \
+  --secret-string '{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}'
+# or, if it already exists:
 aws secretsmanager put-secret-value \
-  --secret-id <CredentialsSecretArn> \
+  --secret-id prod/AdminPortal/Gradwell \
   --secret-string '{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}'
 ```
 

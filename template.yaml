@@ -12,6 +12,15 @@ Parameters:
       When the download job runs. Default is 06:00 UTC on the 1st of every
       month.
 
+  CredentialsSecretName:
+    Type: String
+    Default: "prod/AdminPortal/Gradwell"
+    Description: >
+      Name of the pre-existing Secrets Manager secret holding
+      {"username": "...", "password": "..."} for the Gradwell portal. This
+      stack does not create or manage the secret's value — populate it
+      yourself before (or after) deploying.
+
 Resources:
   CdrBucket:
     Type: AWS::S3::Bucket
@@ -32,16 +41,6 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
 
-  CredentialsSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: >
-        Gradwell portal login credentials. After deploy, set the
-        SecretString to {"username": "...", "password": "..."} via the
-        console or:
-        aws secretsmanager put-secret-value --secret-id <arn> --secret-string '{"username":"...","password":"..."}'
-      Name: !Sub "${AWS::StackName}/gradwell-portal-credentials"
-
   CdrDownloaderFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -57,7 +56,7 @@ Resources:
       Environment:
         Variables:
           CDR_BUCKET_NAME: !Ref CdrBucket
-          CREDENTIALS_SECRET_ARN: !Ref CredentialsSecret
+          CREDENTIALS_SECRET_ID: !Ref CredentialsSecretName
           SSO_URL: "https://sso.pro.gradwell.com"
           ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
           SDR_URL: "https://admin.prod.gradwell.com/sdrs"
@@ -68,7 +67,10 @@ Resources:
         - Statement:
             - Effect: Allow
               Action: secretsmanager:GetSecretValue
-              Resource: !Ref CredentialsSecret
+              # Secrets Manager appends a random 6-character suffix to the
+              # ARN of every secret, so the trailing "*" is required to
+              # match the real ARN of the pre-existing secret named above.
+              Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${CredentialsSecretName}*"
       Events:
         MonthlySchedule:
           Type: Schedule
@@ -82,9 +84,11 @@ Outputs:
   CdrBucketName:
     Description: S3 bucket where downloaded CDR files (and debug screenshots) are stored
     Value: !Ref CdrBucket
-  CredentialsSecretArn:
-    Description: Secrets Manager secret to populate with {"username", "password"}
-    Value: !Ref CredentialsSecret
+  CredentialsSecretNameUsed:
+    Description: >
+      Pre-existing Secrets Manager secret the function reads
+      {"username", "password"} from
+    Value: !Ref CredentialsSecretName
   CdrDownloaderFunctionArn:
     Description: Lambda function ARN
     Value: !GetAtt CdrDownloaderFunction.Arn

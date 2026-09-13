@@ -10,11 +10,12 @@ const client = new SecretsManagerClient({});
 
 /**
  * Fetches {username, password} from the Secrets Manager secret named by the
- * CREDENTIALS_SECRET_ARN environment variable. The secret's SecretString
- * must be a JSON object: {"username": "...", "password": "..."}.
+ * CREDENTIALS_SECRET_ID environment variable (a secret name or full ARN).
+ * The secret's SecretString must be a JSON object:
+ * {"username": "...", "password": "..."}.
  */
 async function getCredentials() {
-  const secretId = requireEnv("CREDENTIALS_SECRET_ARN");
+  const secretId = requireEnv("CREDENTIALS_SECRET_ID");
   const result = await client.send(new GetSecretValueCommand({ SecretId: secretId }));
 
   if (!result.SecretString) {
