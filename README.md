@@ -41,6 +41,7 @@ change or redeploy needed:
 | `SELECTOR_ADMIN_OPTION`     | Link/button that opens Admin          | `a:has-text("Admin")`                                      |
 | `SELECTOR_SDR_OPTION`       | Link/button that opens SDR            | `a:has-text("SDR")`                                        |
 | `SELECTOR_DOWNLOAD_BUTTON`  | Icon/link/button that starts the download for the latest (first-row) period | `table tbody tr:first-child td:last-child a, table tbody tr:first-child td:last-child button, table tbody tr:first-child a, table tbody tr:first-child button` |
+| `SELECTOR_LATEST_END_DATE_CELL` | "End Date" cell of the newest (first) SDR row, used only for the 1st-of-month freshness check below | `table tbody tr:first-child td:nth-child(2)` |
 | `NAVIGATION_TIMEOUT_MS`     | Timeout for each navigation step       | `30000`                                                    |
 | `DOWNLOAD_TIMEOUT_MS`       | Timeout waiting for the download to start | `60000`                                               |
 | `DEBUG_SCREENSHOTS`         | `true` to upload a screenshot to S3 after every step (`debug/<run-id>/<step>.png`), for tuning selectors without shell access | `false` |
@@ -65,6 +66,19 @@ If the actual login flow is multi-step (e.g. username on one screen, then a
 providers), `src/index.js`'s `loginToSso` function will need a small edit to
 add the intermediate click; the current implementation assumes a single-page
 username + password + submit form.
+
+### 1st-of-month "record not yet available" check
+
+On the 1st of the month (UTC), `verifyLatestRecordIsAvailable` in
+`src/index.js` reads the newest SDR row's "End Date" and confirms it equals
+the last calendar day of the previous month — i.e. the period that should
+have just completed. If Gradwell hasn't published that period yet (the
+newest row is still last month's), the function throws instead of silently
+downloading and storing an old file under the new month's S3 key. That
+throw is a normal Lambda error, so it shows up in CloudWatch Logs and trips
+the `CdrDownloaderErrorsAlarm` (→ Datadog) the same as any other failure.
+This check is a no-op on any other day of the month, so manual test invokes
+on non-1st days aren't affected by it.
 
 ## Repository layout
 

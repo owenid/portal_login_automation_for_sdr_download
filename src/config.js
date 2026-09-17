@@ -46,6 +46,12 @@ const config = {
       "SELECTOR_DOWNLOAD_BUTTON",
       "table tbody tr:first-child td:last-child a, table tbody tr:first-child td:last-child button, table tbody tr:first-child a, table tbody tr:first-child button"
     ),
+    // "End Date" is the 2nd column (Start Date / End Date / Download) of the
+    // newest (first) row.
+    latestEndDateCell: env(
+      "SELECTOR_LATEST_END_DATE_CELL",
+      "table tbody tr:first-child td:nth-child(2)"
+    ),
   },
 
   navigationTimeoutMs: Number(env("NAVIGATION_TIMEOUT_MS", "30000")),

@@ -82,6 +82,54 @@ async function goToSdrSection(page) {
   await page.waitForLoadState("networkidle", { timeout: config.navigationTimeoutMs }).catch(() => {});
 }
 
+function isFirstOfMonthUtc(date = new Date()) {
+  return date.getUTCDate() === 1;
+}
+
+function lastDayOfPreviousMonthUtc(date = new Date()) {
+  // Day 0 of the current month is the last day of the previous month.
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 0));
+}
+
+function isSameUtcCalendarDate(a, b) {
+  return (
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth() &&
+    a.getUTCDate() === b.getUTCDate()
+  );
+}
+
+/**
+ * On the 1st of the month, the newest SDR row should cover the period that
+ * just completed (i.e. end on the last day of the previous month). If
+ * Gradwell hasn't published that period yet, downloading the next-newest
+ * row would silently store last month's file under this month's S3 key.
+ * Fail loudly instead, so it surfaces as a Lambda error — which the
+ * CloudWatch alarm on the Errors metric (and therefore Datadog) picks up.
+ */
+async function verifyLatestRecordIsAvailable(page) {
+  if (!isFirstOfMonthUtc()) return;
+
+  const cellText = (
+    await page.locator(config.selectors.latestEndDateCell).first().textContent()
+  ).trim();
+
+  const datePart = cellText.split(",")[0].trim();
+  const endDate = new Date(`${datePart} UTC`);
+  if (isNaN(endDate.getTime())) {
+    throw new Error(
+      `Could not parse the latest SDR period's end date from "${cellText}" — the SDR table format may have changed.`
+    );
+  }
+
+  const expected = lastDayOfPreviousMonthUtc();
+  if (!isSameUtcCalendarDate(endDate, expected)) {
+    throw new Error(
+      `New CDR record not yet available: expected the newest SDR period to end ${expected.toISOString().slice(0, 10)} (last day of the previous month), but the newest row on the page ends ${endDate.toISOString().slice(0, 10)} ("${cellText}"). Gradwell likely hasn't published this month's CDR yet.`
+    );
+  }
+}
+
 /**
  * Clicks the download link/button and reads the resulting file into memory.
  */
@@ -155,6 +203,8 @@ exports.handler = async () => {
 
     await goToSdrSection(page);
     await captureDebugScreenshot(page, bucket, runId, "03-sdr-section");
+
+    await verifyLatestRecordIsAvailable(page);
 
     const { buffer, filename } = await downloadCdrFile(page);
     const key = buildS3Key(filename);
