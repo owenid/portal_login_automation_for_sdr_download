@@ -7,9 +7,9 @@ Description: >
 Parameters:
   ScheduleExpression:
     Type: String
-    Default: "cron(0 6 1 * ? *)"
+    Default: "cron(0 3 1 * ? *)"
     Description: >
-      When the download job runs. Default is 06:00 UTC on the 1st of every
+      When the download job runs. Default is 03:00 UTC on the 1st of every
       month.
 
   CredentialsSecretName:

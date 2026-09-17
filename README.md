@@ -155,7 +155,7 @@ setup.
 
 ## Operational notes
 
-- **Schedule**: EventBridge rule `cron(0 6 1 * ? *)` — 06:00 UTC on the 1st
+- **Schedule**: EventBridge rule `cron(0 3 1 * ? *)` — 03:00 UTC on the 1st
   of every month. Override via the `ScheduleExpression` template parameter.
 - **Timeout/memory**: 180s timeout, 2048 MB memory, 1024 MB of `/tmp`
   ephemeral storage — headless Chromium needs headroom; adjust in
