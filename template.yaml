@@ -84,9 +84,17 @@ Resources:
           SDR_URL: "https://admin.prod.gradwell.com/sdrs"
           DEBUG_SCREENSHOTS: !Ref DebugScreenshots
       Policies:
-        - S3WritePolicy:
-            BucketName: !Ref CdrBucket
         - Statement:
+            # Prefix-scoped rather than SAM's S3WritePolicy (which grants
+            # write access to the entire bucket): the code only ever writes
+            # to cdr/ (the downloaded CDR file) and debug/ (optional
+            # screenshots), so the permission is limited to exactly those
+            # two prefixes and to the one action (PutObject) actually used.
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource:
+                - !Sub "${CdrBucket.Arn}/cdr/*"
+                - !Sub "${CdrBucket.Arn}/debug/*"
             - Effect: Allow
               Action: secretsmanager:GetSecretValue
               # Secrets Manager appends a random 6-character suffix to the

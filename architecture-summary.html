@@ -458,9 +458,11 @@
         </div>
         <div class="component-desc">
           Scoped narrowly on purpose: <code>secretsmanager:GetSecretValue</code>
-          only on the named secret's ARN pattern, and S3 write access limited to
-          the one CDR bucket. The function holds no broader AWS permissions —
-          it can't read other secrets or touch other buckets.
+          only on the named secret's ARN pattern, and <code>s3:PutObject</code>
+          limited to the <code>cdr/*</code> and <code>debug/*</code> prefixes
+          of the CDR bucket — not the bucket as a whole. The function holds
+          no broader AWS permissions — it can't read other secrets, write
+          outside those two prefixes, or touch other buckets.
         </div>
       </div>
 

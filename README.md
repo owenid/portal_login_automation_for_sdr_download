@@ -194,6 +194,11 @@ setup.
 - **Secrets**: credentials are only ever read at runtime from Secrets
   Manager via the function's IAM role; they are never stored in code,
   environment variables, or the S3 bucket.
+- **IAM scope**: the execution role's S3 permission is prefix-scoped, not
+  bucket-wide — `s3:PutObject` only on `cdr/*` and `debug/*` within
+  `CdrBucket` (the only two prefixes the code ever writes to), plus
+  `secretsmanager:GetSecretValue` scoped to the one named secret's ARN
+  pattern. No broader S3 or Secrets Manager access is granted.
 - **Chromium/Playwright versions**: `@sparticuz/chromium` and
   `playwright-core` versions are pinned in `package.json`. If you bump
   `@sparticuz/chromium`, re-check its
