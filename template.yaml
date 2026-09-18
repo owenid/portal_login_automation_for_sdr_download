@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Monthly Lambda that logs into the Gradwell SSO/Admin portal, navigates to
+  the SDR section, downloads the CDR file, and stores it in S3.
+
+Parameters:
+  ScheduleExpression:
+    Type: String
+    Default: "cron(0 3 1 * ? *)"
+    Description: >
+      When the download job runs. Default is 03:00 UTC on the 1st of every
+      month.
+
+  CredentialsSecretName:
+    Type: String
+    Default: "prod/AdminPortal/Gradwell"
+    Description: >
+      Name of the pre-existing Secrets Manager secret holding
+      {"username": "...", "password": "..."} for the Gradwell portal. This
+      stack does not create or manage the secret's value — populate it
+      yourself before (or after) deploying.
+
+  DebugScreenshots:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >
+      Set to "true" to upload a screenshot to S3 after every automation
+      step (debug/<run-id>/<step>.png), for tuning selectors. Managed here
+      (rather than via `aws lambda update-function-configuration`) so it
+      survives future `sam deploy` runs instead of being silently reset to
+      the template's default.
+
+  DatadogForwarderTopicArn:
+    Type: String
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:sns:[a-z0-9-]+:\\d{12}:.+$"
+    ConstraintDescription: Must be a full SNS topic ARN, e.g. arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
+    Description: >
+      ARN of the existing Datadog Forwarder's SNS topic. The CloudWatch
+      alarm on this function's Errors metric publishes its ALARM/OK state
+      changes here so Datadog picks them up as monitor events. This stack
+      does not create or manage that topic — supply its ARN via
+      --parameter-overrides DatadogForwarderTopicArn=<arn>.
+
+Resources:
+  CdrBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireDebugScreenshots
+            Prefix: debug/
+            Status: Enabled
+            ExpirationInDays: 30
+
+  CdrDownloaderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/index.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 2048
+      Timeout: 180
+      EphemeralStorage:
+        Size: 1024
+      Environment:
+        Variables:
+          CDR_BUCKET_NAME: !Ref CdrBucket
+          CREDENTIALS_SECRET_ID: !Ref CredentialsSecretName
+          SSO_URL: "https://sso.prod.gradwell.com"
+          ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
+          SDR_URL: "https://admin.prod.gradwell.com/sdrs"
+          DEBUG_SCREENSHOTS: !Ref DebugScreenshots
+      Policies:
+        - Statement:
+            # Prefix-scoped rather than SAM's S3WritePolicy (which grants
+            # write access to the entire bucket): the code only ever writes
+            # to cdr/ (the downloaded CDR file) and debug/ (optional
+            # screenshots), so the permission is limited to exactly those
+            # two prefixes and to the one action (PutObject) actually used.
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource:
+                - !Sub "${CdrBucket.Arn}/cdr/*"
+                - !Sub "${CdrBucket.Arn}/debug/*"
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              # Secrets Manager appends a random 6-character suffix to the
+              # ARN of every secret, so the trailing "*" is required to
+              # match the real ARN of the pre-existing secret named above.
+              Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${CredentialsSecretName}*"
+      Events:
+        MonthlySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Name: !Sub "${AWS::StackName}-monthly-cdr-download"
+            Description: Triggers the CDR download on the 1st of every month
+            Enabled: true
+
+  CdrDownloaderErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-lambda-errors"
+      AlarmDescription: >
+        Fires when the monthly CDR download Lambda reports at least one
+        error. The function only runs once a month via schedule, so this
+        uses a 1-day evaluation period with TreatMissingData: notBreaching
+        — a day with no invocation reads as "no data", not an error, and
+        only the scheduled run day can actually trip this alarm.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CdrDownloaderFunction
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref DatadogForwarderTopicArn
+      OKActions:
+        - !Ref DatadogForwarderTopicArn
+
+Outputs:
+  CdrBucketName:
+    Description: S3 bucket where downloaded CDR files (and debug screenshots) are stored
+    Value: !Ref CdrBucket
+  CredentialsSecretNameUsed:
+    Description: >
+      Pre-existing Secrets Manager secret the function reads
+      {"username", "password"} from
+    Value: !Ref CredentialsSecretName
+  CdrDownloaderFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt CdrDownloaderFunction.Arn
+  CdrDownloaderErrorsAlarmArn:
+    Description: CloudWatch alarm ARN watching this function's Errors metric
+    Value: !GetAtt CdrDownloaderErrorsAlarm.Arn
