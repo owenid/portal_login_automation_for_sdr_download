@@ -43,17 +43,6 @@ Parameters:
       does not create or manage that topic — supply its ARN via
       --parameter-overrides DatadogForwarderTopicArn=<arn>.
 
-  GraphApiCredentialsSecretName:
-    Type: String
-    Description: >
-      Name of the pre-existing Secrets Manager secret holding
-      {"tenantId", "clientId", "clientSecret", "mailbox"} for the Azure AD
-      app registration used to read the Gradwell password-reset email via
-      Microsoft Graph. This stack does not create or manage the secret's
-      value — populate it yourself once IT has provisioned the app
-      registration and the Exchange Application Access Policy scoping
-      Mail.Read to that one mailbox.
-
 Resources:
   CdrBucket:
     Type: AWS::S3::Bucket
@@ -147,59 +136,6 @@ Resources:
       OKActions:
         - !Ref DatadogForwarderTopicArn
 
-  RotationFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: .
-      Handler: rotation/index.handler
-      Runtime: nodejs22.x
-      Architectures:
-        - x86_64
-      MemorySize: 2048
-      Timeout: 600
-      EphemeralStorage:
-        Size: 1024
-      Environment:
-        Variables:
-          GRAPH_API_CREDENTIALS_SECRET_ID: !Ref GraphApiCredentialsSecretName
-          SSO_URL: "https://sso.prod.gradwell.com"
-          ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
-          SDR_URL: "https://admin.prod.gradwell.com/sdrs"
-          DEBUG_SCREENSHOTS: !Ref DebugScreenshots
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - secretsmanager:DescribeSecret
-                - secretsmanager:GetSecretValue
-                - secretsmanager:PutSecretValue
-                - secretsmanager:UpdateSecretVersionStage
-              Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${CredentialsSecretName}*"
-            - Effect: Allow
-              # GetRandomPassword has no resource-level permissions in IAM —
-              # it must be granted against "*".
-              Action: secretsmanager:GetRandomPassword
-              Resource: "*"
-            - Effect: Allow
-              Action: secretsmanager:GetSecretValue
-              Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${GraphApiCredentialsSecretName}*"
-
-  RotationFunctionInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref RotationFunction
-      Principal: secretsmanager.amazonaws.com
-
-  CredentialsRotationSchedule:
-    Type: AWS::SecretsManager::RotationSchedule
-    DependsOn: RotationFunctionInvokePermission
-    Properties:
-      SecretId: !Ref CredentialsSecretName
-      RotationLambdaARN: !GetAtt RotationFunction.Arn
-      RotationRules:
-        AutomaticallyAfterDays: 90
-
 Outputs:
   CdrBucketName:
     Description: S3 bucket where downloaded CDR files (and debug screenshots) are stored
@@ -215,8 +151,3 @@ Outputs:
   CdrDownloaderErrorsAlarmArn:
     Description: CloudWatch alarm ARN watching this function's Errors metric
     Value: !GetAtt CdrDownloaderErrorsAlarm.Arn
-  RotationFunctionArn:
-    Description: >
-      Lambda function ARN for the Gradwell credential rotation function
-      (AWS Secrets Manager custom rotation contract)
-    Value: !GetAtt RotationFunction.Arn
