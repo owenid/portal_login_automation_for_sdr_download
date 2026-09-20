@@ -80,6 +80,106 @@ the `CdrDownloaderErrorsAlarm` (→ Datadog) the same as any other failure.
 This check is a no-op on any other day of the month, so manual test invokes
 on non-1st days aren't affected by it.
 
+## Credential rotation
+
+`RotationFunction` (`rotation/index.js`) implements AWS Secrets Manager's
+custom rotation Lambda contract (`createSecret` / `setSecret` / `testSecret`
+/ `finishSecret`) for the `CredentialsSecretName` secret, on a 90-day
+schedule (`CredentialsRotationSchedule`, `AutomaticallyAfterDays: 90`).
+
+Gradwell has no rotation API — the only way to change the portal password is
+the same reset-link flow a human would use: log in, request a reset, follow
+the emailed link, and submit a new password. So the rotation Lambda drives
+that flow directly:
+
+1. **createSecret** — generates a new random 24-character password and
+   stages it as `AWSPENDING`, without touching Gradwell yet.
+2. **setSecret** — logs into the portal with the *current* password (reusing
+   `src/config.js`'s SSO login selectors), clicks the "request reset
+   password" link, then reads the resulting reset email via the Microsoft
+   Graph API, extracts the reset link, and submits the `AWSPENDING`
+   password through it.
+3. **testSecret** — logs in again with the `AWSPENDING` password to confirm
+   it actually works, *before* anything is promoted. If this step fails,
+   the old password is still `AWSCURRENT` and the account is never left
+   locked out.
+4. **finishSecret** — promotes `AWSPENDING` to `AWSCURRENT`.
+
+### Why Microsoft Graph
+
+The mailbox that receives Gradwell's reset emails is an organization-managed
+Microsoft 365 mailbox, not one this stack controls. Rather than rerouting
+mail (MX records, SES) — a much bigger, harder-to-approve ask — the rotation
+Lambda reads that one mailbox directly via the Graph API, using an Azure AD
+app registration scoped down as tightly as possible:
+
+- An **App Registration** with the **application** permission `Mail.Read`
+  (admin-consented) and a client secret.
+- An **Exchange Application Access Policy** restricting that app to the
+  single mailbox that receives Gradwell's emails — without this, an
+  application-level `Mail.Read` grant can read *every* mailbox in the
+  tenant.
+
+Ask your Microsoft 365 admin/IT team to provision those two things, then
+create a Secrets Manager secret named by the `GraphApiCredentialsSecretName`
+parameter with:
+
+```bash
+aws secretsmanager create-secret \
+  --name prod/AdminPortal/GradwellGraphApi \
+  --secret-string '{"tenantId":"...","clientId":"...","clientSecret":"...","mailbox":"reset-recipient@yourdomain.com"}'
+```
+
+```bash
+sam deploy --parameter-overrides GraphApiCredentialsSecretName=prod/AdminPortal/GradwellGraphApi
+```
+
+### ⚠️ Reset-flow selectors are unverified
+
+Like the download flow's selectors, everything specific to the
+password-reset page (`SELECTOR_REQUEST_RESET_LINK`,
+`SELECTOR_NEW_PASSWORD_INPUT`, `SELECTOR_CONFIRM_PASSWORD_INPUT`,
+`SELECTOR_RESET_SUBMIT_BUTTON`, `SELECTOR_LOGGED_IN_MARKER`) and the
+reset-email link extraction (`RESET_LINK_HOST`,
+`RESET_EMAIL_SENDER_CONTAINS`) are best-effort defaults, not verified
+against the live site or a real reset email. Confirm and tune them (via env
+vars, no redeploy needed for values — a code change only if the actual page
+structure differs more fundamentally) before relying on automatic rotation
+in production. This function is materially riskier than the downloader: a
+bug in `setSecret` could leave the portal in an unexpected state, though the
+`testSecret` gate means a broken reset never gets promoted to `AWSCURRENT`.
+
+| Env var                          | Purpose                                              | Default                                                       |
+|-----------------------------------|-------------------------------------------------------|-----------------------------------------------------------------|
+| `GRAPH_API_CREDENTIALS_SECRET_ID` | Secret holding the Graph app's tenantId/clientId/clientSecret/mailbox | (required)                                    |
+| `SELECTOR_REQUEST_RESET_LINK`     | "Request reset password" link/button after login       | `a:has-text("Request reset password")`                          |
+| `SELECTOR_NEW_PASSWORD_INPUT`     | New password field on the reset page                    | `input[type="password"]`                                        |
+| `SELECTOR_CONFIRM_PASSWORD_INPUT` | Confirm-password field on the reset page (optional)     | `input[name="confirmPassword"], input[name="password_confirmation"]` |
+| `SELECTOR_RESET_SUBMIT_BUTTON`    | Submit button on the reset page                         | `button[type="submit"]`                                         |
+| `SELECTOR_LOGGED_IN_MARKER`       | Element only present once logged in, used by `testSecret` | `text=Where do you want to go?`                               |
+| `RESET_LINK_HOST`                 | Substring the reset link's URL must contain             | `gradwell.com`                                                   |
+| `RESET_EMAIL_SENDER_CONTAINS`     | Substring the reset email's sender address must contain | `gradwell.com`                                                   |
+| `EMAIL_POLL_TIMEOUT_MS`           | How long to keep polling the mailbox for the reset email | `300000`                                                        |
+| `EMAIL_POLL_INTERVAL_MS`          | Delay between mailbox polls                             | `10000`                                                          |
+
+### Testing rotation
+
+Rotation can be triggered on demand, without waiting for the 90-day
+schedule:
+
+```bash
+aws secretsmanager rotate-secret --secret-id prod/AdminPortal/Gradwell
+```
+
+Then watch `RotationFunction`'s CloudWatch Logs and, if needed,
+`aws secretsmanager describe-secret --secret-id prod/AdminPortal/Gradwell`
+to see the `AWSCURRENT`/`AWSPENDING` version history. **Do this against a
+non-production Gradwell account/secret first if at all possible** — the
+selectors are unverified, and a failed `setSecret` mid-flow means the
+account's password may already have been reset to a value the current
+`AWSCURRENT` secret doesn't have (recoverable via the reset-email flow
+manually, but disruptive).
+
 ## Repository layout
 
 ```
@@ -90,6 +190,9 @@ src/
   config.js          URLs, selectors, timeouts (env-overridable)
   secrets.js         Fetches {username, password} from Secrets Manager
   s3.js              S3 upload helper
+rotation/
+  index.js           Rotation Lambda — Secrets Manager 4-step rotation contract
+  graph.js           Microsoft Graph client (OAuth2 token + mailbox read)
 events/
   manual-invoke.json Empty event payload for `sam local invoke` / test invokes
 ```
@@ -108,16 +211,21 @@ sam deploy --guided
 `sam deploy --guided` will prompt for a stack name and save the answers to
 `samconfig.toml` for future `sam deploy` runs.
 
-### Required: Datadog Forwarder topic ARN
+### Required parameters with no default
 
-This stack has one required parameter with no default:
-`DatadogForwarderTopicArn` — the ARN of your existing Datadog Forwarder's
-SNS topic (see **Alerting** under Operational notes below). `sam deploy
---guided` will prompt for it; non-interactive deploys must pass it
-explicitly:
+- `DatadogForwarderTopicArn` — the ARN of your existing Datadog Forwarder's
+  SNS topic (see **Alerting** under Operational notes below).
+- `GraphApiCredentialsSecretName` — the Secrets Manager secret holding the
+  Microsoft Graph app credentials used by the rotation Lambda (see
+  **Credential rotation** above).
+
+`sam deploy --guided` will prompt for both; non-interactive deploys must
+pass them explicitly:
 
 ```bash
-sam deploy --parameter-overrides DatadogForwarderTopicArn=arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
+sam deploy --parameter-overrides \
+  DatadogForwarderTopicArn=arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic \
+  GraphApiCredentialsSecretName=prod/AdminPortal/GradwellGraphApi
 ```
 
 ### Credentials secret
