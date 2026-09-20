@@ -542,7 +542,158 @@
         </div>
       </div>
 
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">RotationFunction</div>
+          <span class="role-tag role-aws">Compute</span>
+        </div>
+        <div class="component-desc">
+          A second Lambda implementing AWS Secrets Manager's custom
+          rotation contract (<code>createSecret</code> /
+          <code>setSecret</code> / <code>testSecret</code> /
+          <code>finishSecret</code>) on a 90-day
+          <code>RotationSchedule</code>. Since Gradwell has no rotation
+          API, it drives the same email-based reset flow a person would
+          use — see <strong>Credential rotation flow</strong> below.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Microsoft Graph app registration</div>
+          <span class="role-tag role-external">External system</span>
+        </div>
+        <div class="component-desc">
+          An Azure AD App Registration with the application permission
+          <code>Mail.Read</code>, restricted by an Exchange Application
+          Access Policy to exactly one Microsoft 365 mailbox — the one
+          that receives Gradwell's reset emails. Its credentials are held
+          in a separate Secrets Manager secret
+          (<code>GraphApiCredentialsSecretName</code>), never in code or
+          environment variables.
+        </div>
+      </div>
+
     </div>
+  </section>
+
+  <section>
+    <h2>Credential rotation flow</h2>
+    <figure>
+      <svg viewBox="0 0 1040 940" role="img" aria-label="Every 90 days, Secrets Manager invokes RotationFunction through its four-step rotation contract. createSecret generates and stages a new random password. setSecret logs into Gradwell with the current password, requests a reset, waits for the reset email to arrive in the registered Microsoft 365 mailbox, reads it via a tightly-scoped Microsoft Graph app registration, extracts the reset link, and submits the new password. testSecret then logs in again with the new password to confirm it works before anything is promoted — if that fails, rotation aborts and the old password remains AWSCURRENT, so the account is never locked out. Only on success does finishSecret promote the new password to AWSCURRENT.">
+
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- Trigger -->
+        <rect x="390" y="20" width="260" height="80" rx="10" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+        <text x="520" y="50" text-anchor="middle" font-family="var(--font-sans)" font-size="13.5" font-weight="600" fill="var(--ink)">AWS Secrets Manager</text>
+        <text x="520" y="69" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--ink-muted)">RotationSchedule</text>
+        <text x="520" y="85" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">AutomaticallyAfterDays: 90</text>
+
+        <line x1="520" y1="100" x2="520" y2="140" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow2)" />
+        <text x="560" y="124" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">invokes</text>
+
+        <!-- Step 1: createSecret -->
+        <rect x="100" y="150" width="840" height="80" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="130" y="178" font-family="var(--font-mono)" font-size="13.5" font-weight="700" fill="var(--aws)">① createSecret</text>
+        <text x="130" y="200" font-family="var(--font-sans)" font-size="11.5" fill="var(--ink)">Generates a new 24-character random password — Gradwell is not contacted yet.</text>
+        <text x="130" y="218" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">GetRandomPassword → PutSecretValue(AWSPENDING)</text>
+
+        <line x1="520" y1="230" x2="520" y2="270" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow2)" />
+
+        <!-- Step 2: setSecret container -->
+        <text x="520" y="272" text-anchor="middle" font-family="var(--font-mono)" font-size="12" font-weight="700" fill="var(--aws)" letter-spacing="0.02em">② setSecret — DRIVES THE GRADWELL RESET FLOW</text>
+        <rect x="60" y="280" width="920" height="400" rx="14" fill="none" stroke="var(--aws)" stroke-width="1.5" stroke-dasharray="5 5" />
+
+        <!-- 2a: login -->
+        <rect x="100" y="320" width="380" height="70" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1" />
+        <text x="290" y="345" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Log in to Gradwell</text>
+        <text x="290" y="362" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">Using the current AWSCURRENT password</text>
+        <text x="290" y="378" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">sso.prod.gradwell.com</text>
+
+        <line x1="480" y1="355" x2="555" y2="355" stroke="var(--external)" stroke-width="1.5" marker-end="url(#arrow2)" />
+
+        <!-- 2b: request reset -->
+        <rect x="560" y="320" width="380" height="70" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1" />
+        <text x="750" y="345" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Click "Request reset password"</text>
+        <text x="750" y="362" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">Triggers Gradwell to send a reset email</text>
+
+        <line x1="750" y1="390" x2="750" y2="410" stroke="var(--external)" stroke-width="1.5" marker-end="url(#arrow2)" />
+
+        <!-- 2c: email arrives -->
+        <rect x="560" y="410" width="380" height="70" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1" />
+        <text x="750" y="435" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Reset email arrives</text>
+        <text x="750" y="452" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">Sent to the registered Microsoft 365 mailbox</text>
+        <text x="750" y="468" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">org-managed mailbox · not controlled by this stack</text>
+
+        <path d="M560,450 C 470,450 380,470 290,478" fill="none" stroke="var(--security)" stroke-width="1.5" marker-end="url(#arrow2)" />
+
+        <!-- 2d: Graph read (security-scoped) -->
+        <rect x="100" y="480" width="380" height="90" rx="8" fill="var(--surface)" stroke="var(--security)" stroke-width="1.5" stroke-dasharray="4 4" />
+        <text x="290" y="505" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Read via Microsoft Graph</text>
+        <text x="290" y="522" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">POST /oauth2/v2.0/token → GET /messages</text>
+        <text x="290" y="538" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink)">Extracts the reset link from the email body</text>
+        <text x="290" y="555" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" font-weight="600" fill="var(--security)">Mail.Read scoped to this one mailbox only</text>
+
+        <path d="M290,570 C 290,585 290,585 290,590" fill="none" stroke="var(--external)" stroke-width="1.5" marker-end="url(#arrow2)" />
+
+        <!-- 2e: submit new password -->
+        <rect x="100" y="590" width="840" height="70" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1" />
+        <text x="520" y="615" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Follow the link, submit the new password</text>
+        <text x="520" y="632" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">Submits the AWSPENDING password on Gradwell's reset form</text>
+        <text x="520" y="648" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">extracted reset link → gradwell.com/...</text>
+
+        <line x1="520" y1="680" x2="520" y2="700" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow2)" />
+
+        <!-- Step 3: testSecret -->
+        <rect x="100" y="700" width="840" height="90" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="130" y="725" font-family="var(--font-mono)" font-size="13.5" font-weight="700" fill="var(--aws)">③ testSecret</text>
+        <text x="130" y="746" font-family="var(--font-sans)" font-size="11.5" fill="var(--ink)">Logs in again with the AWSPENDING password to confirm it actually works — before anything is promoted.</text>
+        <text x="130" y="764" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">waits for the logged-in marker element</text>
+
+        <!-- Outcomes -->
+        <line x1="350" y1="790" x2="350" y2="825" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow2)" />
+        <text x="350" y="810" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" font-weight="600" fill="var(--aws)">succeeds</text>
+
+        <path d="M780,790 C 820,805 850,812 860,825" fill="none" stroke="var(--security)" stroke-width="1.5" marker-end="url(#arrow2)" />
+        <text x="870" y="808" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" font-weight="600" fill="var(--security)">fails</text>
+
+        <!-- Step 4: finishSecret -->
+        <rect x="100" y="830" width="620" height="90" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="130" y="858" font-family="var(--font-mono)" font-size="13.5" font-weight="700" fill="var(--aws)">④ finishSecret</text>
+        <text x="130" y="879" font-family="var(--font-sans)" font-size="11.5" fill="var(--ink)">Promotes AWSPENDING to AWSCURRENT.</text>
+        <text x="130" y="897" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">UpdateSecretVersionStage</text>
+
+        <!-- STOP -->
+        <rect x="750" y="830" width="230" height="90" rx="10" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+        <text x="865" y="858" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="700" fill="var(--security)">Rotation aborts</text>
+        <text x="865" y="877" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink)">AWSCURRENT stays unchanged</text>
+        <text x="865" y="893" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink)">— the account is never locked out</text>
+
+      </svg>
+      <figcaption>
+        On a 90-day schedule, Secrets Manager invokes <code>RotationFunction</code>
+        through its four-step contract. <code>createSecret</code> stages a new
+        random password without touching Gradwell. <code>setSecret</code> logs
+        in with the current password, requests a reset, waits for the reset
+        email to land in the registered Microsoft 365 mailbox, reads it via a
+        Microsoft Graph app registration scoped to that one mailbox, and
+        submits the new password through the emailed link.
+        <code>testSecret</code> then confirms the new password actually logs
+        in — only on success does <code>finishSecret</code> promote it to
+        <code>AWSCURRENT</code>. A failure at <code>testSecret</code> leaves
+        the old password active, so a broken reset never locks the account out.
+      </figcaption>
+      <div class="legend">
+        <span><i class="swatch sw-aws"></i>AWS-owned resource</span>
+        <span><i class="swatch sw-external"></i>External · third-party (Gradwell / Microsoft 365)</span>
+        <span><i class="swatch sw-security"></i>Security boundary / safety gate</span>
+      </div>
+    </figure>
   </section>
 
   <section>
@@ -571,6 +722,21 @@
       also mean "Gradwell hasn't published this period yet" rather than a
       real bug — check the CloudWatch Logs message before treating it as an
       incident.
+    </span>
+  </div>
+
+  <div class="gap-note">
+    <span class="mark">!</span>
+    <span>
+      <strong>Rotation is not yet runnable.</strong>
+      <code>RotationFunction</code> is deployed but cannot succeed until IT
+      provisions the Azure AD app registration (<code>Mail.Read</code>,
+      admin-consented) and the Exchange Application Access Policy scoping it
+      to one mailbox, and the resulting credentials are populated into the
+      <code>GraphApiCredentialsSecretName</code> secret. The reset-flow
+      selectors and reset-email link extraction are also unverified against
+      the live site — the same caveat the download flow carried before it
+      was tuned against the real portal.
     </span>
   </div>
 
