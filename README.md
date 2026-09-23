@@ -108,13 +108,13 @@ sam deploy --guided
 `sam deploy --guided` will prompt for a stack name and save the answers to
 `samconfig.toml` for future `sam deploy` runs.
 
-### Required: Datadog Forwarder topic ARN
+### Optional: Datadog Forwarder topic ARN
 
-This stack has one required parameter with no default:
-`DatadogForwarderTopicArn` — the ARN of your existing Datadog Forwarder's
-SNS topic (see **Alerting** under Operational notes below). `sam deploy
---guided` will prompt for it; non-interactive deploys must pass it
-explicitly:
+`DatadogForwarderTopicArn` (see **Alerting** under Operational notes below)
+defaults to an empty string, so the stack deploys fine without it — the
+CloudWatch alarm still exists, it just has no `AlarmActions`/`OKActions`
+until you supply a real Datadog Forwarder SNS topic ARN. Once that
+Forwarder exists, wire it up with:
 
 ```bash
 sam deploy --parameter-overrides DatadogForwarderTopicArn=arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
@@ -194,10 +194,12 @@ setup.
   ephemeral storage — headless Chromium needs headroom; adjust in
   `template.yaml` if downloads are large or the site is slow.
 - **Alerting**: `CdrDownloaderErrorsAlarm` watches the function's `Errors`
-  metric (namespace `AWS/Lambda`) and publishes ALARM/OK state changes to
-  the SNS topic named by `DatadogForwarderTopicArn` — your existing Datadog
+  metric (namespace `AWS/Lambda`). If `DatadogForwarderTopicArn` is set, it
+  publishes ALARM/OK state changes to that SNS topic — your Datadog
   Forwarder — so a failed run surfaces as a Datadog monitor event rather
-  than sitting silently in CloudWatch Logs. Because this function only
+  than sitting silently in CloudWatch Logs. Left unset (the default), the
+  alarm still exists and is visible via CloudWatch/`describe-alarms`, it
+  just has no external notification target. Because this function only
   runs once a month, the alarm uses a 1-day evaluation period with
   `TreatMissingData: notBreaching`: a day with no invocation reads as "no
   data" rather than a false alarm, and only the scheduled run day can

@@ -48,14 +48,20 @@ Parameters:
 
   DatadogForwarderTopicArn:
     Type: String
-    AllowedPattern: "^arn:aws[a-zA-Z-]*:sns:[a-z0-9-]+:\\d{12}:.+$"
-    ConstraintDescription: Must be a full SNS topic ARN, e.g. arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
+    Default: ""
+    AllowedPattern: "^$|^arn:aws[a-zA-Z-]*:sns:[a-z0-9-]+:\\d{12}:.+$"
+    ConstraintDescription: Must be empty, or a full SNS topic ARN, e.g. arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
     Description: >
-      ARN of the existing Datadog Forwarder's SNS topic. The CloudWatch
-      alarm on this function's Errors metric publishes its ALARM/OK state
-      changes here so Datadog picks them up as monitor events. This stack
-      does not create or manage that topic — supply its ARN via
-      --parameter-overrides DatadogForwarderTopicArn=<arn>.
+      ARN of the Datadog Forwarder's SNS topic. Optional — leave empty (the
+      default) to deploy without Datadog alerting; the CloudWatch alarm
+      still exists and is visible in the console/CLI, it just has no
+      AlarmActions/OKActions until this is set. This stack does not create
+      or manage that topic — once your Datadog Forwarder is deployed,
+      supply its ARN via --parameter-overrides
+      DatadogForwarderTopicArn=<arn> to wire up notifications.
+
+Conditions:
+  HasDatadogForwarderTopicArn: !Not [!Equals [!Ref DatadogForwarderTopicArn, ""]]
 
 Resources:
   CdrBucket:
@@ -172,10 +178,8 @@ Resources:
       Threshold: 0
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
-      AlarmActions:
-        - !Ref DatadogForwarderTopicArn
-      OKActions:
-        - !Ref DatadogForwarderTopicArn
+      AlarmActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
+      OKActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
 
 Outputs:
   CdrBucketName:
