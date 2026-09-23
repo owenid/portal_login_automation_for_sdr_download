@@ -181,11 +181,15 @@ setup.
 
 ## Operational notes
 
-- **Schedule**: EventBridge rule `cron(1 9 1 * ? *)` — 09:01 UTC on the 1st
-  of every month (09:01 UK time during GMT; 10:01 UK local time during
-  British Summer Time, since EventBridge cron is fixed UTC with no
-  daylight-saving awareness). Override via the `ScheduleExpression`
-  template parameter.
+- **Schedule**: AWS EventBridge Scheduler (`MonthlyCdrDownloadSchedule`),
+  not a classic EventBridge Rule — `cron(0 9 1 * ? *)` evaluated in the
+  `ScheduleTimezone` parameter (default `Europe/London`), which fires at
+  a fixed **09:00 UK local time year-round**. EventBridge Scheduler
+  applies the GMT/BST transition automatically, so the cron expression
+  never needs to change between winter and summer. Scheduler invokes the
+  Lambda directly using `SchedulerInvokeRole`, an IAM role scoped to
+  `lambda:InvokeFunction` on just this function. Override the time via
+  `ScheduleExpression`, or the timezone via `ScheduleTimezone`.
 - **Timeout/memory**: 180s timeout, 2048 MB memory, 1024 MB of `/tmp`
   ephemeral storage — headless Chromium needs headroom; adjust in
   `template.yaml` if downloads are large or the site is slow.

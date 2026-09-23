@@ -7,12 +7,24 @@ Description: >
 Parameters:
   ScheduleExpression:
     Type: String
-    Default: "cron(1 9 1 * ? *)"
+    Default: "cron(0 9 1 * ? *)"
     Description: >
-      When the download job runs. Default is 09:01 UTC on the 1st of every
-      month — i.e. 09:01 UK time during GMT (late Oct-late Mar), but 10:01
-      UK local time during British Summer Time, since EventBridge cron
-      expressions are fixed UTC and have no daylight-saving awareness.
+      When the download job runs, evaluated in the timezone named by
+      ScheduleTimezone (not UTC). Default is 09:00 on the 1st of every
+      month. Runs via AWS EventBridge Scheduler rather than a classic
+      EventBridge Rule specifically so this can be a fixed local time —
+      classic EventBridge cron rules are UTC-only and have no
+      daylight-saving awareness.
+
+  ScheduleTimezone:
+    Type: String
+    Default: "Europe/London"
+    Description: >
+      IANA timezone ScheduleExpression is evaluated in. EventBridge
+      Scheduler applies daylight-saving transitions for this zone
+      automatically, so the default keeps the run fixed at 09:00 UK local
+      time year-round (09:00 GMT in winter, 09:00 BST in summer) without
+      needing to adjust the cron expression twice a year.
 
   CredentialsSecretName:
     Type: String
@@ -103,14 +115,41 @@ Resources:
               # ARN of every secret, so the trailing "*" is required to
               # match the real ARN of the pre-existing secret named above.
               Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${CredentialsSecretName}*"
-      Events:
-        MonthlySchedule:
-          Type: Schedule
-          Properties:
-            Schedule: !Ref ScheduleExpression
-            Name: !Sub "${AWS::StackName}-monthly-cdr-download"
-            Description: Triggers the CDR download on the 1st of every month
-            Enabled: true
+
+  SchedulerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeCdrDownloaderFunction
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt CdrDownloaderFunction.Arn
+
+  MonthlyCdrDownloadSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${AWS::StackName}-monthly-cdr-download"
+      Description: >
+        Triggers the CDR download at a fixed local time (see
+        ScheduleTimezone), DST-aware via AWS EventBridge Scheduler.
+      ScheduleExpression: !Ref ScheduleExpression
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      State: ENABLED
+      Target:
+        Arn: !GetAtt CdrDownloaderFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
 
   CdrDownloaderErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -153,3 +192,8 @@ Outputs:
   CdrDownloaderErrorsAlarmArn:
     Description: CloudWatch alarm ARN watching this function's Errors metric
     Value: !GetAtt CdrDownloaderErrorsAlarm.Arn
+  MonthlyCdrDownloadScheduleArn:
+    Description: >
+      EventBridge Scheduler schedule ARN that triggers the download at a
+      fixed local time (see ScheduleTimezone)
+    Value: !GetAtt MonthlyCdrDownloadSchedule.Arn

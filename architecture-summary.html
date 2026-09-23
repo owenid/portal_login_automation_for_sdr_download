@@ -314,7 +314,7 @@
   <section>
     <h2>System diagram</h2>
     <figure>
-      <svg viewBox="0 0 1040 620" role="img" aria-label="Amazon EventBridge triggers an AWS Lambda function monthly. The Lambda reads credentials from Secrets Manager, drives a headless browser through the external Gradwell SSO, Admin and SDR pages, and on the 1st of the month verifies the newest SDR period has actually been published before downloading it — throwing an error to CloudWatch instead if it hasn't. On success it writes the file to an S3 bucket, with every step's logs landing in CloudWatch — all inside a narrowly scoped IAM role.">
+      <svg viewBox="0 0 1040 620" role="img" aria-label="AWS EventBridge Scheduler triggers an AWS Lambda function monthly at a fixed UK local time, DST-aware. The Lambda reads credentials from Secrets Manager, drives a headless browser through the external Gradwell SSO, Admin and SDR pages, and on the 1st of the month verifies the newest SDR period has actually been published before downloading it — throwing an error to CloudWatch instead if it hasn't. On success it writes the file to an S3 bucket, with every step's logs landing in CloudWatch — all inside a narrowly scoped IAM role.">
 
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -328,9 +328,10 @@
 
         <!-- EventBridge -->
         <rect x="24" y="248" width="176" height="80" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
-        <text x="112" y="278" text-anchor="middle" font-family="var(--font-sans)" font-size="13.5" font-weight="600" fill="var(--ink)">Amazon EventBridge</text>
-        <text x="112" y="298" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--ink-muted)">Schedule rule</text>
-        <text x="112" y="315" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">cron(1 9 1 * ? *)</text>
+        <text x="112" y="272" text-anchor="middle" font-family="var(--font-sans)" font-size="13" font-weight="600" fill="var(--ink)">AWS EventBridge Scheduler</text>
+        <text x="112" y="291" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">cron(0 9 1 * ? *)</text>
+        <text x="112" y="307" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">Europe/London</text>
+        <text x="112" y="323" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">09:00 UK local, DST-aware</text>
 
         <!-- EventBridge -> Lambda -->
         <line x1="200" y1="288" x2="270" y2="288" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow)" />
@@ -403,7 +404,8 @@
 
       </svg>
       <figcaption>
-        Once a month, EventBridge starts the Lambda. Inside one invocation, it reads
+        Once a month, EventBridge Scheduler starts the Lambda at a fixed UK
+        local time. Inside one invocation, it reads
         the portal credentials from Secrets Manager, drives a real Chromium session
         through Gradwell's SSO and Admin pages to the SDR list, and — only on the
         1st of the month — checks that the newest period has actually been
@@ -425,15 +427,20 @@
 
       <div class="component">
         <div class="component-id">
-          <div class="component-name">Amazon EventBridge</div>
+          <div class="component-name">AWS EventBridge Scheduler</div>
           <span class="role-tag role-aws">Trigger</span>
         </div>
         <div class="component-desc">
-          Fires the Lambda on <code>cron(1 9 1 * ? *)</code> — 09:01 UTC on the 1st
-          of every month (09:01 UK time in GMT; 10:01 UK local during BST) —
-          via a Schedule rule attached directly to the function.
-          Nothing else in the system runs unless this rule fires, or someone
-          invokes the function manually for testing.
+          <code>MonthlyCdrDownloadSchedule</code> fires the Lambda on
+          <code>cron(0 9 1 * ? *)</code>, evaluated in the
+          <code>Europe/London</code> timezone — a fixed <strong>09:00 UK
+          local time</strong> every 1st of the month, year-round.
+          Scheduler applies the GMT/BST transition automatically (unlike a
+          classic EventBridge Rule, which is UTC-only), and invokes the
+          function directly via <code>SchedulerInvokeRole</code>, an IAM
+          role scoped to <code>lambda:InvokeFunction</code> on just this
+          function. Nothing else in the system runs unless this schedule
+          fires, or someone invokes the function manually for testing.
         </div>
       </div>
 
@@ -555,7 +562,7 @@
       <div class="fact"><span class="fact-label">Runtime</span><span class="fact-value">nodejs22.x</span></div>
       <div class="fact"><span class="fact-label">Memory</span><span class="fact-value">2048 MB</span></div>
       <div class="fact"><span class="fact-label">Timeout</span><span class="fact-value">180s</span></div>
-      <div class="fact"><span class="fact-label">Schedule</span><span class="fact-value">1 9 1 * ? *</span></div>
+      <div class="fact"><span class="fact-label">Schedule</span><span class="fact-value">09:00 Europe/London</span></div>
     </div>
   </section>
 
