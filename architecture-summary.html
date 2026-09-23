@@ -455,7 +455,9 @@
           and 1024 MB of <code>/tmp</code>. Drives a real headless Chromium session
           via <code>playwright-core</code> and <code>@sparticuz/chromium</code> to
           perform the login, navigation, and file download exactly as a person
-          would in a browser.
+          would in a browser. Measures its own wall-clock duration and returns
+          it as <code>durationMs</code> in the response (and logs it on
+          failure too), so a run creeping toward the timeout is easy to spot.
         </div>
       </div>
 
@@ -544,9 +546,11 @@
           (namespace <code>AWS/Lambda</code>). Uses a 1-day evaluation
           period with <code>TreatMissingData: notBreaching</code>, since the
           function only runs once a month — an idle day reads as "no data,"
-          not a failure. Publishes ALARM/OK transitions to the SNS topic
-          named by <code>DatadogForwarderTopicArn</code>, which the existing
-          Datadog Forwarder consumes to raise a monitor event.
+          not a failure. If <code>DatadogForwarderTopicArn</code> is set, it
+          publishes ALARM/OK transitions to that SNS topic for the Datadog
+          Forwarder to consume; left unset (the default), the alarm still
+          exists and is visible via CloudWatch, just without an external
+          notification target.
         </div>
       </div>
 
@@ -569,16 +573,17 @@
   <div class="gap-note">
     <span class="mark">!</span>
     <span>
-      <strong>Alerting is wired but not fully activated.</strong>
+      <strong>Datadog alerting is optional and off by default.</strong>
       <code>CdrDownloaderErrorsAlarm</code> watches the function's
-      <code>Errors</code> metric and publishes ALARM/OK state to an SNS topic
-      that the Datadog Forwarder consumes — but the
-      <code>DatadogForwarderTopicArn</code> stack parameter still needs the
-      real Forwarder topic ARN before those notifications actually reach
-      Datadog. Note that a legitimate ALARM on the 1st of the month can now
-      also mean "Gradwell hasn't published this period yet" rather than a
-      real bug — check the CloudWatch Logs message before treating it as an
-      incident.
+      <code>Errors</code> metric regardless, but its ALARM/OK state only
+      reaches Datadog once <code>DatadogForwarderTopicArn</code> is set to
+      a real Forwarder SNS topic ARN (<code>sam deploy
+      --parameter-overrides DatadogForwarderTopicArn=&lt;arn&gt;</code>) —
+      until then, check the alarm directly via CloudWatch or
+      <code>aws cloudwatch describe-alarms</code>. Note that a legitimate
+      ALARM on the 1st of the month can now also mean "Gradwell hasn't
+      published this period yet" rather than a real bug — check the
+      CloudWatch Logs message before treating it as an incident.
     </span>
   </div>
 
