@@ -267,6 +267,18 @@ aws lambda invoke \
 cat out.json
 ```
 
+On success, `out.json` includes `durationMs` — wall-clock time for the whole
+run (login through S3 upload), e.g.:
+
+```json
+{"statusCode":200,"bucket":"...","key":"cdr/2026/09/...","durationMs":18342}
+```
+
+The same duration is also logged to CloudWatch on both success
+(`CDR file uploaded to s3://... in <ms>ms`) and failure
+(`CDR download automation failed after <ms>ms: ...`) — useful for spotting
+runs that are creeping toward the function's 180s timeout.
+
 Check CloudWatch Logs for the function, and the S3 bucket's `cdr/` (and, if
 `DEBUG_SCREENSHOTS=true`, `debug/`) prefixes.
 
@@ -277,8 +289,11 @@ setup.
 
 ## Operational notes
 
-- **Schedule**: EventBridge rule `cron(0 3 1 * ? *)` — 03:00 UTC on the 1st
-  of every month. Override via the `ScheduleExpression` template parameter.
+- **Schedule**: EventBridge rule `cron(1 9 1 * ? *)` — 09:01 UTC on the 1st
+  of every month (09:01 UK time during GMT; 10:01 UK local time during
+  British Summer Time, since EventBridge cron is fixed UTC with no
+  daylight-saving awareness). Override via the `ScheduleExpression`
+  template parameter.
 - **Timeout/memory**: 180s timeout, 2048 MB memory, 1024 MB of `/tmp`
   ephemeral storage — headless Chromium needs headroom; adjust in
   `template.yaml` if downloads are large or the site is slow.

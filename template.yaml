@@ -7,10 +7,12 @@ Description: >
 Parameters:
   ScheduleExpression:
     Type: String
-    Default: "cron(0 3 1 * ? *)"
+    Default: "cron(1 9 1 * ? *)"
     Description: >
-      When the download job runs. Default is 03:00 UTC on the 1st of every
-      month.
+      When the download job runs. Default is 09:01 UTC on the 1st of every
+      month — i.e. 09:01 UK time during GMT (late Oct-late Mar), but 10:01
+      UK local time during British Summer Time, since EventBridge cron
+      expressions are fixed UTC and have no daylight-saving awareness.
 
   CredentialsSecretName:
     Type: String

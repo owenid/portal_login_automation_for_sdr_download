@@ -171,6 +171,7 @@ async function captureDebugScreenshot(page, bucket, runId, stepName) {
 }
 
 exports.handler = async () => {
+  const startedAt = Date.now();
   const bucket = requireEnv("CDR_BUCKET_NAME");
   const runId = crypto.randomUUID();
 
@@ -210,10 +211,12 @@ exports.handler = async () => {
     const key = buildS3Key(filename);
     await uploadBuffer(bucket, key, buffer);
 
-    console.log(`CDR file uploaded to s3://${bucket}/${key}`);
-    return { statusCode: 200, bucket, key };
+    const durationMs = Date.now() - startedAt;
+    console.log(`CDR file uploaded to s3://${bucket}/${key} in ${durationMs}ms`);
+    return { statusCode: 200, bucket, key, durationMs };
   } catch (err) {
-    console.error("CDR download automation failed:", err);
+    const durationMs = Date.now() - startedAt;
+    console.error(`CDR download automation failed after ${durationMs}ms:`, err);
     await captureDebugScreenshot(page, bucket, runId, "99-failure");
     throw err;
   } finally {
