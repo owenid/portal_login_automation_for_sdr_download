@@ -159,6 +159,18 @@ aws lambda invoke \
 cat out.json
 ```
 
+On success, `out.json` includes `durationMs` — wall-clock time for the whole
+run (login through S3 upload), e.g.:
+
+```json
+{"statusCode":200,"bucket":"...","key":"cdr/2026/09/...","durationMs":18342}
+```
+
+The same duration is also logged to CloudWatch on both success
+(`CDR file uploaded to s3://... in <ms>ms`) and failure
+(`CDR download automation failed after <ms>ms: ...`) — useful for spotting
+runs that are creeping toward the function's 180s timeout.
+
 Check CloudWatch Logs for the function, and the S3 bucket's `cdr/` (and, if
 `DEBUG_SCREENSHOTS=true`, `debug/`) prefixes.
 
