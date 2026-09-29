@@ -558,6 +558,265 @@
   </section>
 
   <section>
+    <h2>Sequence flow — happy path</h2>
+    <figure>
+      <svg viewBox="0 0 1040 720" role="img" aria-label="Sequence diagram of a successful run: EventBridge Scheduler invokes the Lambda, which fetches credentials from Secrets Manager, logs into Gradwell, navigates to the SDR list, confirms the newest period has been published on the 1st of the month, downloads the CDR file, uploads it to S3, logs success with the run's duration, and returns.">
+        <defs>
+          <marker id="seqArrowHappy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- Actor headers -->
+        <g font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)" text-anchor="middle">
+          <rect x="0" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="70" y="46">EventBridge<tspan x="70" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Scheduler</tspan></text>
+
+          <rect x="185" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="255" y="46">CdrDownloader<tspan x="255" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Function</tspan></text>
+
+          <rect x="370" y="20" width="140" height="44" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+          <text x="440" y="46">Secrets<tspan x="440" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Manager</tspan></text>
+
+          <rect x="565" y="20" width="140" height="44" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1.5" />
+          <text x="635" y="46">Gradwell<tspan x="635" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">SSO / Admin / SDR</tspan></text>
+
+          <rect x="750" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="820" y="46">Amazon<tspan x="820" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">S3</tspan></text>
+
+          <rect x="895" y="20" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5" />
+          <text x="965" y="46" fill="var(--ink-muted)">CloudWatch</text>
+        </g>
+
+        <!-- Lifelines -->
+        <g stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="3 4">
+          <line x1="70" y1="64" x2="70" y2="690" />
+          <line x1="255" y1="64" x2="255" y2="690" />
+          <line x1="440" y1="64" x2="440" y2="690" />
+          <line x1="635" y1="64" x2="635" y2="690" />
+          <line x1="820" y1="64" x2="820" y2="690" />
+          <line x1="965" y1="64" x2="965" y2="690" />
+        </g>
+
+        <!-- Messages -->
+        <g font-family="var(--font-sans)" font-size="10.5" fill="var(--ink)" text-anchor="middle" color="var(--aws)">
+          <line x1="70" y1="110" x2="248" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="162" y="102">invoke() — 09:00 Europe/London, monthly</text>
+
+          <line x1="255" y1="152" x2="433" y2="152" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="347" y="144">GetSecretValue</text>
+
+          <line x1="440" y1="194" x2="262" y2="194" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="347" y="186">{username, password}</text>
+
+          <line x1="255" y1="236" x2="628" y2="236" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="228">SSO login</text>
+
+          <line x1="635" y1="278" x2="262" y2="278" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="270">authenticated session</text>
+
+          <line x1="255" y1="320" x2="628" y2="320" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="312">Admin → SDR navigation</text>
+
+          <line x1="255" y1="362" x2="628" y2="362" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="354">read newest row (1st-of-month check)</text>
+
+          <line x1="635" y1="404" x2="262" y2="404" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="396">End Date = expected period ✓</text>
+
+          <line x1="255" y1="446" x2="628" y2="446" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="438">click download (newest row)</text>
+
+          <line x1="635" y1="488" x2="262" y2="488" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="480">CDR file stream</text>
+
+          <line x1="255" y1="530" x2="813" y2="530" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="533" y="522">PutObject cdr/&lt;yyyy&gt;/&lt;mm&gt;/…</text>
+
+          <line x1="820" y1="572" x2="262" y2="572" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="533" y="564">200 OK</text>
+
+          <line x1="255" y1="614" x2="958" y2="614" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="610" y="606">log success + durationMs</text>
+
+          <line x1="255" y1="656" x2="77" y2="656" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="162" y="648">return {200, bucket, key, durationMs}</text>
+        </g>
+      </svg>
+      <figcaption>
+        Every message on the left runs inside the one Lambda invocation the
+        Scheduler starts. Solid arrows are calls, dashed arrows are returns.
+        The 1st-of-month freshness check is the only conditional step —
+        it's a no-op (immediately returns) on any other day.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Sequence flow — unhappy path</h2>
+    <figure>
+      <svg viewBox="0 0 1040 620" role="img" aria-label="Sequence diagram of a failing run, illustrated with an SSO login failure: the Lambda's catch block captures a debug screenshot if enabled, logs the error with elapsed duration, and rethrows. The unhandled exception is recorded by Lambda as an Errors metric increment, which after a one-day evaluation period trips the CloudWatch alarm; if a Datadog Forwarder topic ARN is configured, that alarm state reaches Datadog as a monitor event, otherwise it is visible only via CloudWatch.">
+        <defs>
+          <marker id="seqArrowSad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <g font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)" text-anchor="middle">
+          <rect x="0" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="70" y="46">EventBridge<tspan x="70" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Scheduler</tspan></text>
+
+          <rect x="185" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="255" y="46">CdrDownloader<tspan x="255" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Function</tspan></text>
+
+          <rect x="370" y="20" width="140" height="44" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+          <text x="440" y="46">Secrets<tspan x="440" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Manager</tspan></text>
+
+          <rect x="565" y="20" width="140" height="44" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1.5" />
+          <text x="635" y="46">Gradwell<tspan x="635" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">SSO / Admin / SDR</tspan></text>
+
+          <rect x="895" y="20" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5" />
+          <text x="965" y="46" fill="var(--ink-muted)">CloudWatch</text>
+        </g>
+
+        <g stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="3 4">
+          <line x1="70" y1="64" x2="70" y2="590" />
+          <line x1="255" y1="64" x2="255" y2="590" />
+          <line x1="440" y1="64" x2="440" y2="590" />
+          <line x1="635" y1="64" x2="635" y2="590" />
+          <line x1="965" y1="64" x2="965" y2="590" />
+        </g>
+
+        <g font-family="var(--font-sans)" font-size="10.5" fill="var(--ink)" text-anchor="middle">
+          <line x1="70" y1="110" x2="248" y2="110" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="162" y="102">invoke()</text>
+
+          <line x1="255" y1="152" x2="433" y2="152" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="347" y="144">GetSecretValue</text>
+
+          <line x1="440" y1="194" x2="262" y2="194" stroke="var(--aws)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="347" y="186">{username, password}</text>
+
+          <line x1="255" y1="236" x2="628" y2="236" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="228">SSO login</text>
+
+          <line x1="635" y1="278" x2="262" y2="278" stroke="var(--security)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="270" fill="var(--security)" font-weight="600">✕ timeout / bad credentials</text>
+        </g>
+
+        <!-- Note: catch block -->
+        <rect x="290" y="300" width="500" height="42" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="540" y="325" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">catch(err): captureDebugScreenshot('99-failure') if enabled</text>
+
+        <g font-family="var(--font-sans)" font-size="10.5" text-anchor="middle">
+          <line x1="255" y1="368" x2="958" y2="368" stroke="var(--security)" stroke-width="1.6" marker-end="url(#seqArrowSad)" />
+          <text x="610" y="360" fill="var(--security)" font-weight="600">console.error(…failed after &lt;ms&gt;ms) + throw</text>
+
+          <line x1="255" y1="410" x2="77" y2="410" stroke="var(--security)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="162" y="402" fill="var(--security)" font-weight="600">unhandled exception — invocation ends in error</text>
+        </g>
+
+        <!-- Notes: metric -> alarm -> datadog -->
+        <rect x="700" y="440" width="330" height="48" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="865" y="460" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">AWS records +1 on the Errors metric</text>
+        <text x="865" y="475" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">(namespace AWS/Lambda)</text>
+
+        <line x1="865" y1="488" x2="865" y2="510" stroke="var(--rule)" stroke-width="1.2" marker-end="url(#seqArrowSad)" />
+
+        <rect x="700" y="512" width="330" height="48" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="865" y="532" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">1-day evaluation, notBreaching default</text>
+        <text x="865" y="547" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">→ ALARM if ≥1 error that day</text>
+
+        <rect x="60" y="512" width="330" height="60" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="225" y="530" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="600" fill="var(--security)">DatadogForwarderTopicArn set?</text>
+        <text x="225" y="546" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink)">Yes → SNS → Datadog Forwarder → monitor event</text>
+        <text x="225" y="560" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink)">No (default) → check via CloudWatch only</text>
+
+        <line x1="700" y1="542" x2="393" y2="542" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="2 3" marker-end="url(#seqArrowSad)" />
+      </svg>
+      <figcaption>
+        Illustrated with an SSO login failure, but the same shape applies to
+        every failure point below — one throw, one catch, one CloudWatch
+        entry. The alarm and Datadog steps at the bottom are shared by every
+        failure, not specific to login.
+      </figcaption>
+    </figure>
+
+    <div class="components">
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Secrets fetch</div>
+          <span class="role-tag role-security">Before try/catch</span>
+        </div>
+        <div class="component-desc">
+          <code>getCredentials()</code> throws if the secret has no
+          <code>SecretString</code>, isn't valid JSON, or is missing
+          <code>username</code>/<code>password</code>. This happens
+          <em>before</em> the browser launches, so no debug screenshot is
+          possible — it's still logged and still trips the alarm the same
+          way.
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">SSO login</div>
+          <span class="role-tag role-external">In try/catch</span>
+        </div>
+        <div class="component-desc">
+          A Playwright timeout or selector-not-found error if the
+          credentials are wrong or the login form's selectors don't match
+          the live page (unverified against the real site — see the
+          selector caveats in the README).
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Admin / SDR navigation</div>
+          <span class="role-tag role-external">In try/catch</span>
+        </div>
+        <div class="component-desc">
+          A click or navigation timeout. The code already falls back to a
+          direct <code>page.goto()</code> once before giving up, so this
+          only surfaces if both the click and the fallback navigation fail.
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Freshness check</div>
+          <span class="role-tag role-external">1st of month only</span>
+        </div>
+        <div class="component-desc">
+          Throws <code>"New CDR record not yet available: …"</code> if the
+          newest SDR row's End Date isn't the last day of the previous
+          month — i.e. Gradwell hasn't published the new period yet. A
+          no-op on every other day.
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Download</div>
+          <span class="role-tag role-external">In try/catch</span>
+        </div>
+        <div class="component-desc">
+          Throws <code>"Download failed: &lt;reason&gt;"</code> if
+          Playwright's <code>download.failure()</code> reports one.
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">S3 upload</div>
+          <span class="role-tag role-aws">In try/catch</span>
+        </div>
+        <div class="component-desc">
+          Rare given the scoped IAM policy, but a permissions or network
+          error on <code>PutObject</code> follows the exact same path as
+          every other failure above.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
     <h2>Operational facts</h2>
     <div class="facts">
       <div class="fact"><span class="fact-label">Region</span><span class="fact-value">eu-west-2</span></div>
