@@ -58,21 +58,31 @@ async function goToAdminHome(page) {
 }
 
 /**
- * Clicks through to the SDR section, falling back to a direct navigation.
+ * Navigates to the SDR section.
+ *
+ * Every production invocation logged so far shows the SDR nav link's
+ * locator resolving correctly (it's really there, id="menu-nav-partner-sdrs")
+ * but the click always timing out with "element is not visible" — it sits
+ * inside a collapsed/off-screen menu panel that a real user would open via
+ * a "MENU" toggle first, which headless runs never do. The fallback direct
+ * navigation has succeeded in 100% of observed runs, so go there first
+ * instead of burning a full navigationTimeoutMs on a click that's never
+ * once worked; only attempt the click if the direct nav somehow doesn't
+ * land on the expected URL.
  */
 async function goToSdrSection(page) {
-  try {
-    await page.locator(config.selectors.sdrOption).first().click({ timeout: config.navigationTimeoutMs });
-    await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
-  } catch (err) {
-    console.warn(`Could not click SDR option (${err.message}); falling back to direct navigation`);
-  }
+  await page.goto(config.sdrUrl, {
+    waitUntil: "domcontentloaded",
+    timeout: config.navigationTimeoutMs,
+  });
 
   if (!page.url().startsWith(config.sdrUrl)) {
-    await page.goto(config.sdrUrl, {
-      waitUntil: "domcontentloaded",
-      timeout: config.navigationTimeoutMs,
-    });
+    try {
+      await page.locator(config.selectors.sdrOption).first().click({ timeout: config.navigationTimeoutMs });
+      await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
+    } catch (err) {
+      console.warn(`Could not click SDR option (${err.message}); direct navigation also didn't land on ${config.sdrUrl}`);
+    }
   }
 
   // The SDR list loads asynchronously after the page shell renders (a
