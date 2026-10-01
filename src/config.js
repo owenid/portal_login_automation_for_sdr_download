@@ -52,6 +52,17 @@ const config = {
       "SELECTOR_LATEST_END_DATE_CELL",
       "table tbody tr:first-child td:nth-child(2)"
     ),
+    // Any row of the SDR table. Its presence is what "the SDR list loaded"
+    // means; if it never appears, the page is showing something else
+    // instead (e.g. an error such as "customer is required").
+    sdrTableRow: env("SELECTOR_SDR_TABLE_ROW", "table tbody tr"),
+    // Elements that typically hold an on-page error/validation message.
+    // Their visible text is quoted in failure messages so the Lambda error
+    // says *why* a step failed rather than just "Timeout exceeded".
+    pageErrorMessage: env(
+      "SELECTOR_PAGE_ERROR_MESSAGE",
+      '[role="alert"], .alert, .error, .error-message, .text-danger, .invalid-feedback, [class*="error" i]'
+    ),
   },
 
   navigationTimeoutMs: Number(env("NAVIGATION_TIMEOUT_MS", "30000")),
@@ -59,7 +70,9 @@ const config = {
 
   // Set DEBUG_SCREENSHOTS=true to upload a screenshot to S3 after every step
   // (debug/<run-id>/<step>.png). Invaluable for tuning selectors against the
-  // real site without shell access to the Lambda.
+  // real site without shell access to the Lambda. Failures are always
+  // captured (screenshot + HTML to S3, screenshot to CloudWatch Logs)
+  // regardless of this setting.
   debugScreenshots: env("DEBUG_SCREENSHOTS", "false") === "true",
 };
 

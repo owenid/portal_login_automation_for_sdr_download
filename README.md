@@ -42,6 +42,8 @@ change or redeploy needed:
 | `SELECTOR_SDR_OPTION`       | Link/button that opens SDR            | `a:has-text("SDR")`                                        |
 | `SELECTOR_DOWNLOAD_BUTTON`  | Icon/link/button that starts the download for the latest (first-row) period | `table tbody tr:first-child td:last-child a, table tbody tr:first-child td:last-child button, table tbody tr:first-child a, table tbody tr:first-child button` |
 | `SELECTOR_LATEST_END_DATE_CELL` | "End Date" cell of the newest (first) SDR row, used only for the 1st-of-month freshness check below | `table tbody tr:first-child td:nth-child(2)` |
+| `SELECTOR_SDR_TABLE_ROW`    | Any row of the SDR table; if none appears after opening the SDR page, the run fails immediately with whatever the page is showing instead | `table tbody tr` |
+| `SELECTOR_PAGE_ERROR_MESSAGE` | Elements whose visible text is quoted in failure messages as the on-page error (e.g. "customer is required") | `[role="alert"], .alert, .error, .error-message, .text-danger, .invalid-feedback, [class*="error" i]` |
 | `NAVIGATION_TIMEOUT_MS`     | Timeout for each navigation step       | `30000`                                                    |
 | `DOWNLOAD_TIMEOUT_MS`       | Timeout waiting for the download to start | `60000`                                               |
 | `DEBUG_SCREENSHOTS`         | `true` to upload a screenshot to S3 after every step (`debug/<run-id>/<step>.png`), for tuning selectors without shell access | `false` |
@@ -79,6 +81,31 @@ throw is a normal Lambda error, so it shows up in CloudWatch Logs and trips
 the `CdrDownloaderErrorsAlarm` (→ Datadog) the same as any other failure.
 This check is a no-op on any other day of the month, so manual test invokes
 on non-1st days aren't affected by it.
+
+### When a run fails
+
+Every failure — whatever `DEBUG_SCREENSHOTS` is set to — produces:
+
+- **A descriptive error message** naming the step that failed, why, and
+  what the page was showing, e.g.
+  `Opening the SDR page failed: the SDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/sdrs; title: "..."; page message: "customer is required". Failure screenshot: s3://<bucket>/debug/<run-id>/99-failure.png`
+  instead of a bare Playwright `Timeout 30000ms exceeded`. This is the
+  Lambda's `errorMessage` (what `aws lambda invoke` writes to `out.json`).
+- **S3 debug files**: `debug/<run-id>/99-failure.png` (full-page
+  screenshot) and `debug/<run-id>/99-failure.html` (the page's HTML, for
+  working out the real selectors).
+- **CloudWatch Logs entries**: a JSON line with `"event":"CDR_DOWNLOAD_FAILED"`
+  holding the step, reason, run ID and the S3 locations above, plus a line
+  starting `FAILURE_SCREENSHOT_BASE64` holding a JPEG screenshot of the
+  page. To turn the latest one back into an image:
+
+  ```bash
+  aws logs filter-log-events \
+    --log-group-name /aws/lambda/<function name> \
+    --filter-pattern '"FAILURE_SCREENSHOT_BASE64"' \
+    --query 'events[-1].message' --output text \
+    | sed 's/.*FAILURE_SCREENSHOT_BASE64 //' | base64 -d > failure.jpg
+  ```
 
 ## Repository layout
 

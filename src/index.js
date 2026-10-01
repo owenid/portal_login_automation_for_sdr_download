@@ -9,6 +9,84 @@ const { getCredentials } = require("./secrets");
 const { uploadBuffer } = require("./s3");
 
 /**
+ * An automation failure that names the step that failed and why, so the
+ * Lambda error (and CloudWatch/Datadog) reads e.g. "Opening the SDR page
+ * failed: ... Page message: "customer is required"" instead of a bare
+ * Playwright "Timeout 30000ms exceeded".
+ */
+class AutomationError extends Error {
+  constructor(step, reason, options) {
+    super(`${step} failed: ${reason}`, options);
+    this.name = "AutomationError";
+    this.step = step;
+  }
+}
+
+/**
+ * Collects what the page is currently showing: URL, title, any visible
+ * error/validation messages, and a snippet of the visible text. Never
+ * throws — it's only ever used to explain another failure.
+ */
+async function describePage(page) {
+  if (!page || page.isClosed()) return null;
+
+  const info = { url: page.url(), title: "", errorMessages: [], visibleText: "" };
+  info.title = await page.title().catch(() => "");
+  info.errorMessages = await page
+    .evaluate((selector) => {
+      const messages = [];
+      for (const el of document.querySelectorAll(selector)) {
+        const text = (el.innerText || "").replace(/\s+/g, " ").trim();
+        if (text && el.getClientRects().length > 0 && !messages.includes(text)) messages.push(text);
+      }
+      return messages.slice(0, 5);
+    }, config.selectors.pageErrorMessage)
+    .catch(() => []);
+  info.visibleText = await page
+    .evaluate(() => {
+      const root = document.querySelector("main") || document.body;
+      return root ? (root.innerText || "").replace(/\s+/g, " ").trim().slice(0, 300) : "";
+    })
+    .catch(() => "");
+  return info;
+}
+
+function summarizePage(info) {
+  if (!info) return "No browser page was open.";
+  const parts = [`Page URL: ${info.url}`];
+  if (info.title) parts.push(`title: "${info.title}"`);
+  if (info.errorMessages.length > 0) {
+    parts.push(`page message: ${info.errorMessages.map((m) => `"${m}"`).join(", ")}`);
+  } else if (info.visibleText) {
+    parts.push(`visible text: "${info.visibleText}"`);
+  }
+  return `${parts.join("; ")}.`;
+}
+
+/**
+ * Runs one step of the journey, rethrowing any unexpected error (typically
+ * a Playwright TimeoutError) as an AutomationError that names the step and
+ * describes what the page was showing at the time.
+ */
+async function runStep(page, step, fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof AutomationError) throw err;
+
+    // Playwright's messages include terminal colour codes; strip them.
+    const message = String(err.message || err).replace(/\u001b\[[0-9;]*m/g, "");
+    const firstLine = message.split("\n")[0].replace(/\.$/, "");
+    const waitingFor = /waiting for (.+)/.exec(message);
+    const reason =
+      err.name === "TimeoutError"
+        ? `timed out (${firstLine}${waitingFor ? `, waiting for ${waitingFor[1].trim()}` : ""}).`
+        : `${firstLine}.`;
+    throw new AutomationError(step, `${reason} ${summarizePage(await describePage(page))}`, { cause: err });
+  }
+}
+
+/**
  * Logs into the Gradwell SSO page.
  */
 async function loginToSso(page, username, password) {
@@ -80,6 +158,24 @@ async function goToSdrSection(page) {
   // to settle before treating the page as ready — otherwise the list (and
   // its download controls) may not exist yet.
   await page.waitForLoadState("networkidle", { timeout: config.navigationTimeoutMs }).catch(() => {});
+
+  // Fail here, with whatever the page is showing instead, if the SDR table
+  // never rendered — rather than letting a later step time out waiting for
+  // a cell or download button that was never going to exist.
+  const tableLoaded = await page
+    .locator(config.selectors.sdrTableRow)
+    .first()
+    .waitFor({ state: "attached", timeout: config.navigationTimeoutMs })
+    .then(
+      () => true,
+      () => false
+    );
+  if (!tableLoaded) {
+    throw new AutomationError(
+      "Opening the SDR page",
+      `the SDR table did not appear within ${config.navigationTimeoutMs / 1000}s (no element matched "${config.selectors.sdrTableRow}"). ${summarizePage(await describePage(page))}`
+    );
+  }
 }
 
 function isFirstOfMonthUtc(date = new Date()) {
@@ -110,9 +206,20 @@ function isSameUtcCalendarDate(a, b) {
 async function verifyLatestRecordIsAvailable(page) {
   if (!isFirstOfMonthUtc()) return;
 
-  const cellText = (
-    await page.locator(config.selectors.latestEndDateCell).first().textContent()
-  ).trim();
+  let rawCellText;
+  try {
+    rawCellText = await page
+      .locator(config.selectors.latestEndDateCell)
+      .first()
+      .textContent({ timeout: config.navigationTimeoutMs });
+  } catch (err) {
+    throw new AutomationError(
+      "Checking the newest SDR period is published",
+      `could not find the "End Date" cell of the newest SDR row (no element matched "${config.selectors.latestEndDateCell}" within ${config.navigationTimeoutMs / 1000}s) — the SDR table layout may differ from what's expected. ${summarizePage(await describePage(page))}`,
+      { cause: err }
+    );
+  }
+  const cellText = (rawCellText || "").trim();
 
   const datePart = cellText.split(",")[0].trim();
   const endDate = new Date(`${datePart} UTC`);
@@ -170,51 +277,121 @@ async function captureDebugScreenshot(page, bucket, runId, stepName) {
   }
 }
 
+// CloudWatch Logs caps a single log event at 256 KB, so the screenshot
+// logged there is a viewport-only JPEG kept comfortably under that.
+const MAX_LOGGED_SCREENSHOT_CHARS = 200 * 1024;
+
+/**
+ * Captures the state of the page at the moment of failure, regardless of
+ * DEBUG_SCREENSHOTS: a full-page PNG and the page HTML go to S3 under
+ * debug/<run-id>/, and a base64 JPEG screenshot is written to CloudWatch
+ * Logs on a line starting with FAILURE_SCREENSHOT_BASE64 (see README for
+ * how to decode it). Never throws.
+ */
+async function captureFailure(page, bucket, runId) {
+  const result = { screenshotS3Uri: null, htmlS3Uri: null };
+  if (!page || page.isClosed()) return result;
+
+  try {
+    const key = `debug/${runId}/99-failure.png`;
+    await uploadBuffer(bucket, key, await page.screenshot({ fullPage: true }), "image/png");
+    result.screenshotS3Uri = `s3://${bucket}/${key}`;
+  } catch (err) {
+    console.error("Failed to save failure screenshot to S3:", err);
+  }
+
+  try {
+    const key = `debug/${runId}/99-failure.html`;
+    await uploadBuffer(bucket, key, Buffer.from(await page.content(), "utf8"), "text/html; charset=utf-8");
+    result.htmlS3Uri = `s3://${bucket}/${key}`;
+  } catch (err) {
+    console.error("Failed to save failure page HTML to S3:", err);
+  }
+
+  try {
+    let encoded = "";
+    for (const quality of [60, 30]) {
+      encoded = (await page.screenshot({ type: "jpeg", quality })).toString("base64");
+      if (encoded.length <= MAX_LOGGED_SCREENSHOT_CHARS) break;
+    }
+    if (encoded.length <= MAX_LOGGED_SCREENSHOT_CHARS) {
+      console.error(`FAILURE_SCREENSHOT_BASE64 ${encoded}`);
+    } else {
+      console.error(
+        `Failure screenshot too large to log to CloudWatch (${encoded.length} base64 chars); see ${result.screenshotS3Uri || "the debug/ prefix in S3"} instead.`
+      );
+    }
+  } catch (err) {
+    console.error("Failed to log failure screenshot to CloudWatch:", err);
+  }
+
+  return result;
+}
+
 exports.handler = async () => {
   const bucket = requireEnv("CDR_BUCKET_NAME");
   const runId = crypto.randomUUID();
 
-  const { username, password } = await getCredentials();
-
-  // @sparticuz/chromium is published as an ES module. Some local Node
-  // versions can require() it transparently via Node's newer require(esm)
-  // interop, but AWS Lambda's nodejs22.x runtime cannot, so it must be
-  // loaded with a dynamic import() instead.
-  const chromium = (await import("@sparticuz/chromium")).default;
-
   let browser;
   let page;
   try {
-    browser = await playwright.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-      downloadsPath: "/tmp/downloads",
-    });
+    const { username, password } = await runStep(page, "Fetching portal credentials from Secrets Manager", () =>
+      getCredentials()
+    );
+
+    // @sparticuz/chromium is published as an ES module. Some local Node
+    // versions can require() it transparently via Node's newer require(esm)
+    // interop, but AWS Lambda's nodejs22.x runtime cannot, so it must be
+    // loaded with a dynamic import() instead.
+    const chromium = (await import("@sparticuz/chromium")).default;
+
+    browser = await runStep(page, "Launching the headless browser", async () =>
+      playwright.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+        downloadsPath: "/tmp/downloads",
+      })
+    );
 
     const context = await browser.newContext();
     page = await context.newPage();
 
-    await loginToSso(page, username, password);
+    await runStep(page, "Logging in to Gradwell SSO", () => loginToSso(page, username, password));
     await captureDebugScreenshot(page, bucket, runId, "01-after-login");
 
-    await goToAdminHome(page);
+    await runStep(page, "Opening the Admin home page", () => goToAdminHome(page));
     await captureDebugScreenshot(page, bucket, runId, "02-admin-home");
 
-    await goToSdrSection(page);
+    await runStep(page, "Opening the SDR page", () => goToSdrSection(page));
     await captureDebugScreenshot(page, bucket, runId, "03-sdr-section");
 
-    await verifyLatestRecordIsAvailable(page);
+    await runStep(page, "Checking the newest SDR period is published", () =>
+      verifyLatestRecordIsAvailable(page)
+    );
 
-    const { buffer, filename } = await downloadCdrFile(page);
+    const { buffer, filename } = await runStep(page, "Downloading the CDR file", () => downloadCdrFile(page));
     const key = buildS3Key(filename);
-    await uploadBuffer(bucket, key, buffer);
+    await runStep(page, "Uploading the CDR file to S3", () => uploadBuffer(bucket, key, buffer));
 
     console.log(`CDR file uploaded to s3://${bucket}/${key}`);
     return { statusCode: 200, bucket, key };
   } catch (err) {
-    console.error("CDR download automation failed:", err);
-    await captureDebugScreenshot(page, bucket, runId, "99-failure");
+    const failure = await captureFailure(page, bucket, runId);
+    console.error(
+      JSON.stringify({
+        event: "CDR_DOWNLOAD_FAILED",
+        runId,
+        step: err.step || "unknown",
+        reason: err.message,
+        screenshotS3Uri: failure.screenshotS3Uri,
+        htmlS3Uri: failure.htmlS3Uri,
+        stack: err.stack,
+      })
+    );
+    if (failure.screenshotS3Uri) {
+      err.message += ` Failure screenshot: ${failure.screenshotS3Uri}`;
+    }
     throw err;
   } finally {
     if (browser) await browser.close();
