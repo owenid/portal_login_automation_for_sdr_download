@@ -119,6 +119,13 @@
     margin: 0 0 16px 0;
   }
 
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 24px 0 4px 0;
+  }
+
   section { display: flex; flex-direction: column; }
 
   /* ---- Diagram ---- */
@@ -230,6 +237,21 @@
     max-width: 64ch;
   }
 
+  .err-msg {
+    display: block;
+    margin: 8px 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .err-fix { margin-top: 6px; }
+  .steps { margin: 12px 0 20px; padding-left: 22px; line-height: 1.6; }
+  .steps li { margin-bottom: 6px; }
+  .steps code, .err-fix code { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: anywhere; }
   .component-desc code {
     font-family: var(--font-mono);
     font-size: 0.92em;
@@ -655,7 +677,7 @@
   <section>
     <h2>Sequence flow — unhappy path</h2>
     <figure>
-      <svg viewBox="0 0 1040 1040" role="img" aria-label="Sequence diagram showing every unhappy-path branch on the same message flow as the happy path. Numbered red markers show where each of eight failure points can occur: secret fetch, SSO login, Admin/SDR navigation, the 1st-of-month freshness check, download, no CDR file to download, a changed portal layout at any selector-dependent step, and S3 upload. Whichever one throws, execution converges on the same shared outcome: the Lambda's catch block captures a debug screenshot if enabled, logs the error with elapsed duration to the function's CloudWatch Logs log group, and rethrows. AWS separately records an Errors metric increment; after a one-day evaluation period this trips the CloudWatch alarm, which — if a Datadog Forwarder topic ARN is configured — reaches Datadog as a monitor event, otherwise it is visible only via CloudWatch.">
+      <svg viewBox="0 0 1040 1040" role="img" aria-label="Sequence diagram showing every unhappy-path branch on the same message flow as the happy path. Error-code markers show where each failure can occur: CDR-E01 secret fetch, CDR-E02 browser launch, CDR-E03 SSO login, CDR-E04 to E06 Admin and SDR navigation including the SDR table not appearing, CDR-E07 to E09 the 1st-of-month freshness check, CDR-E10 download, and CDR-E11 S3 upload. Whichever one throws, execution converges on the same shared outcome: the Lambda's catch block always saves a failure screenshot and the page HTML to S3, logs the screenshot and a CDR_DOWNLOAD_FAILED JSON line with the code, step and reason to CloudWatch Logs, and rethrows with an errorMessage that starts with the code. AWS separately records an Errors metric increment; after a one-day evaluation period this trips the CloudWatch alarm, which — if a Datadog Forwarder topic ARN is configured — reaches Datadog as a monitor event, otherwise it is visible only via CloudWatch.">
         <defs>
           <marker id="seqArrowSad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
@@ -684,10 +706,10 @@
 
         <!-- Cross-cutting note: layout changed -->
         <rect x="770" y="80" width="260" height="66" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.2" stroke-dasharray="4 4" />
-        <text x="900" y="98" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="700" fill="var(--security)">⑦ Portal layout changed</text>
-        <text x="900" y="113" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">Generic selector timeout, at any</text>
-        <text x="900" y="126" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">of ②③④⑤⑥ — instead of the</text>
-        <text x="900" y="139" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">condition shown, if the page changed</text>
+        <text x="900" y="98" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="700" fill="var(--security)">Portal layout changed</text>
+        <text x="900" y="113" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">Surfaces as the code of the step it</text>
+        <text x="900" y="126" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">broke (E03–E10), naming the selector</text>
+        <text x="900" y="139" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">and quoting what the page showed</text>
 
         <g stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="3 4">
           <line x1="70" y1="64" x2="70" y2="690" />
@@ -707,36 +729,37 @@
 
           <line x1="440" y1="194" x2="262" y2="194" stroke="var(--aws)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
           <text x="347" y="186">{username, password}</text>
-          <text x="480" y="198" fill="var(--security)" font-weight="700" font-size="13">①</text>
+          <text x="468" y="198" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E01</text>
+          <text x="162" y="126" fill="var(--security)" font-weight="700" font-size="11">E02 browser launch</text>
 
           <line x1="255" y1="236" x2="628" y2="236" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="228">SSO login</text>
-          <text x="655" y="240" fill="var(--security)" font-weight="700" font-size="13">②</text>
+          <text x="643" y="240" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E03</text>
 
           <line x1="635" y1="278" x2="262" y2="278" stroke="var(--external)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="270">authenticated session</text>
 
           <line x1="255" y1="320" x2="628" y2="320" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="312">Admin → SDR navigation</text>
-          <text x="655" y="324" fill="var(--security)" font-weight="700" font-size="13">③</text>
+          <text x="643" y="324" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E04–E06</text>
 
           <line x1="255" y1="362" x2="628" y2="362" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="354">read newest row (1st-of-month check)</text>
-          <text x="655" y="366" fill="var(--security)" font-weight="700" font-size="13">④</text>
+          <text x="643" y="366" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E07–E09</text>
 
           <line x1="635" y1="404" x2="262" y2="404" stroke="var(--external)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="396">End Date = expected period ✓</text>
 
           <line x1="255" y1="446" x2="628" y2="446" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="438">click download (newest row)</text>
-          <text x="648" y="450" fill="var(--security)" font-weight="700" font-size="13">⑤⑥</text>
+          <text x="643" y="450" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E10</text>
 
           <line x1="635" y1="488" x2="262" y2="488" stroke="var(--external)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
           <text x="441" y="480">CDR file stream</text>
 
           <line x1="255" y1="530" x2="813" y2="530" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
           <text x="533" y="522">PutObject cdr/&lt;yyyy&gt;/&lt;mm&gt;/…</text>
-          <text x="840" y="534" fill="var(--security)" font-weight="700" font-size="13">⑧</text>
+          <text x="828" y="534" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E11</text>
 
           <line x1="820" y1="572" x2="262" y2="572" stroke="var(--aws)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
           <text x="533" y="564">200 OK</text>
@@ -750,24 +773,25 @@
 
         <!-- Convergence: any numbered failure enters the catch block here -->
         <line x1="255" y1="690" x2="255" y2="718" stroke="var(--security)" stroke-width="1.6" marker-end="url(#seqArrowSad)" />
-        <text x="255" y="710" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" font-weight="700" fill="var(--security)">①②③④⑤⑥⑧ — any failure enters here</text>
+        <text x="255" y="710" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" font-weight="700" fill="var(--security)">CDR-E01 … E11 — any failure enters here</text>
 
         <!-- Note: catch block -->
-        <rect x="290" y="720" width="500" height="42" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
-        <text x="540" y="745" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">catch(err): captureDebugScreenshot('99-failure') if enabled</text>
+        <rect x="290" y="716" width="500" height="58" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="540" y="737" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">catch(err): captureFailure() — always, whatever DEBUG_SCREENSHOTS is</text>
+        <text x="540" y="755" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">→ S3 debug/&lt;run-id&gt;/99-failure.png + 99-failure.html</text>
 
         <g font-family="var(--font-sans)" font-size="10.5" text-anchor="middle">
           <line x1="255" y1="800" x2="958" y2="800" stroke="var(--security)" stroke-width="1.6" marker-end="url(#seqArrowSad)" />
-          <text x="610" y="792" fill="var(--security)" font-weight="600">console.error(…failed after &lt;ms&gt;ms) + throw</text>
+          <text x="610" y="792" fill="var(--security)" font-weight="600">log screenshot + CDR_DOWNLOAD_FAILED {code, step, reason}, then throw</text>
 
           <line x1="255" y1="842" x2="77" y2="842" stroke="var(--security)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
-          <text x="162" y="834" fill="var(--security)" font-weight="600">unhandled exception — invocation ends in error</text>
+          <text x="162" y="834" fill="var(--security)" font-weight="600">errorMessage "[CDR-Exx] &lt;step&gt; failed: …"</text>
         </g>
 
         <!-- Note: log write -->
         <rect x="700" y="814" width="330" height="46" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
         <text x="865" y="833" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">/aws/lambda/CdrDownloaderFunction-…</text>
-        <text x="865" y="848" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink-muted)">gets the raw text — separate from the metric below</text>
+        <text x="865" y="848" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink-muted)">gets code, reason + screenshot — separate from the metric</text>
 
         <line x1="865" y1="860" x2="865" y2="870" stroke="var(--rule)" stroke-width="1.2" marker-end="url(#seqArrowSad)" />
 
@@ -790,121 +814,167 @@
         <line x1="700" y1="974" x2="393" y2="974" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="2 3" marker-end="url(#seqArrowSad)" />
       </svg>
       <figcaption>
-        One diagram, eight branches: the numbered markers (①–⑧) show every
-        point in the normal message flow where a failure can occur instead —
-        matched to the numbered list below for the exact error text. Whichever
-        one fires, everything from "any failure enters here" down is
-        identical: one catch, one CloudWatch Logs entry, one Errors metric
-        increment, one alarm evaluation, and — if configured — one Datadog
-        notification.
+        One diagram, every branch: the red <code>E01</code>–<code>E11</code>
+        markers show each point in the normal message flow where a failure
+        can occur instead, matched to the error codes below. Whichever one
+        fires, everything from "any failure enters here" down is identical:
+        one catch, a screenshot and page HTML in S3, one coded CloudWatch Logs
+        entry (with the screenshot), one Errors metric increment, one alarm
+        evaluation, and — if configured — one Datadog notification.
       </figcaption>
     </figure>
 
+    <h3>What happens on any failure</h3>
+    <ol class="steps">
+      <li>The failing step throws an error with a code (<code>CDR-E01</code>–<code>CDR-E11</code>), the step name, the reason, and — when a browser page is open — the page URL, title and any on-page error message.</li>
+      <li>The catch block saves a full-page screenshot and the page HTML to S3 at <code>debug/&lt;run-id&gt;/99-failure.png</code> and <code>99-failure.html</code>. This always happens; <code>DebugScreenshots</code> only adds the per-step screenshots.</li>
+      <li>It writes a JPEG screenshot to CloudWatch Logs on a line starting <code>FAILURE_SCREENSHOT_BASE64</code>.</li>
+      <li>It writes a <code>CDR_DOWNLOAD_FAILED</code> JSON line to CloudWatch Logs with <code>code</code>, <code>step</code>, <code>reason</code>, <code>runId</code>, <code>durationMs</code> and the two S3 paths.</li>
+      <li>It rethrows. The invocation's <code>errorMessage</code> (what <code>aws lambda invoke</code> writes to <code>out.json</code>) reads <code>[CDR-Exx] &lt;step&gt; failed: &lt;reason&gt; Failure screenshot: s3://…</code>.</li>
+      <li>AWS adds 1 to the <code>Errors</code> metric, which trips <code>CdrDownloaderErrorsAlarm</code> and, if configured, Datadog.</li>
+    </ol>
+
+    <h3>How to investigate a failure</h3>
+    <ol class="steps">
+      <li>Read the code and message in <code>out.json</code>, or search CloudWatch Logs for <code>CDR_DOWNLOAD_FAILED</code>.</li>
+      <li>Look up the code below for what it means and what to do.</li>
+      <li>Open the screenshot: download the S3 path from the message, or decode the latest CloudWatch copy with <code>aws logs filter-log-events --log-group-name /aws/lambda/&lt;function&gt; --filter-pattern '"FAILURE_SCREENSHOT_BASE64"' --query 'events[-1].message' --output text | sed 's/.*FAILURE_SCREENSHOT_BASE64 //' | base64 -d &gt; failure.jpg</code></li>
+      <li>If a selector needs changing, use <code>99-failure.html</code> to find the right element.</li>
+      <li>Fix, redeploy if needed, then re-invoke (see Recovery below).</li>
+    </ol>
+
+    <h3>Error codes</h3>
     <div class="components">
       <div class="component">
         <div class="component-id">
-          <div class="component-name">① Secrets fetch</div>
-          <span class="role-tag role-security">Before try/catch</span>
+          <div class="component-name">CDR-E01 · Credentials fetch failed</div>
+          <span class="role-tag role-security">Secrets Manager</span>
         </div>
         <div class="component-desc">
-          <code>getCredentials()</code> throws if the secret has no
-          <code>SecretString</code>, isn't valid JSON, or is missing
-          <code>username</code>/<code>password</code>. This happens
-          <em>before</em> the browser launches, so no debug screenshot is
-          possible — it's still logged and still trips the alarm the same
-          way.
+          The secret <code>prod/AdminPortal/Gradwell</code> couldn't be read, isn't valid JSON, or is missing <code>username</code>/<code>password</code>. Happens before the browser starts, so there is no screenshot.
+          <span class="err-msg">[CDR-E01] Fetching portal credentials from Secrets Manager failed: &lt;AWS error&gt;. No browser page was open.</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the secret exists in eu-west-2 with both keys, and that the function role can read it.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">② SSO login</div>
-          <span class="role-tag role-external">In try/catch</span>
+          <div class="component-name">CDR-E02 · Browser failed to start</div>
+          <span class="role-tag role-aws">Lambda runtime</span>
         </div>
         <div class="component-desc">
-          A Playwright timeout or selector-not-found error if the
-          credentials are wrong or the login form's selectors don't match
-          the live page (unverified against the real site — see the
-          selector caveats in the README).
+          Headless Chromium couldn't launch — usually a dependency or memory problem after a <code>@sparticuz/chromium</code> upgrade. No screenshot is possible.
+          <span class="err-msg">[CDR-E02] Launching the headless browser failed: &lt;error&gt;. No browser page was open.</span>
+          <div class="err-fix"><strong>What to do:</strong> Re-check the <code>@sparticuz/chromium</code> / <code>playwright-core</code> versions and the 2048 MB memory setting.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">③ Admin / SDR navigation</div>
-          <span class="role-tag role-external">In try/catch</span>
+          <div class="component-name">CDR-E03 · SSO login failed</div>
+          <span class="role-tag role-external">Gradwell SSO</span>
         </div>
         <div class="component-desc">
-          A click or navigation timeout. The code already falls back to a
-          direct <code>page.goto()</code> once before giving up, so this
-          only surfaces if both the click and the fallback navigation fail.
+          The login form fields or button weren't found, or the login didn't complete — wrong credentials, a changed login page, or an extra step such as MFA.
+          <span class="err-msg">[CDR-E03] Logging in to Gradwell SSO failed: timed out (locator.fill: Timeout 30000ms exceeded, waiting for locator('…')). Page URL: …; page message: "…".</span>
+          <div class="err-fix"><strong>What to do:</strong> Open the failure screenshot. If the password changed, update the secret; if the page changed, update <code>SELECTOR_USERNAME_INPUT</code>, <code>SELECTOR_PASSWORD_INPUT</code> or <code>SELECTOR_LOGIN_BUTTON</code>.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">④ Freshness check</div>
-          <span class="role-tag role-external">1st of month only</span>
+          <div class="component-name">CDR-E04 · Admin home page didn't open</div>
+          <span class="role-tag role-external">Gradwell Admin</span>
         </div>
         <div class="component-desc">
-          Throws <code>"New CDR record not yet available: …"</code> if the
-          newest SDR row's End Date isn't the last day of the previous
-          month — i.e. Gradwell hasn't published the new period yet. A
-          no-op on every other day.
+          Neither clicking Admin nor going straight to <code>/home</code> worked — often means the login didn't actually succeed.
+          <span class="err-msg">[CDR-E04] Opening the Admin home page failed: &lt;reason&gt;. Page URL: …</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the screenshot for a login error or expired session, then the <code>ADMIN_HOME_URL</code> setting.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">⑤ Download</div>
-          <span class="role-tag role-external">In try/catch</span>
+          <div class="component-name">CDR-E05 · SDR page didn't open</div>
+          <span class="role-tag role-external">Gradwell Admin</span>
         </div>
         <div class="component-desc">
-          Throws <code>"Download failed: &lt;reason&gt;"</code> if
-          Playwright's <code>download.failure()</code> reports one — a
-          download that started but broke partway through.
+          Navigating to <code>/sdrs</code> itself failed (timeout or network error) before any table check.
+          <span class="err-msg">[CDR-E05] Opening the SDR page failed: &lt;reason&gt;. Page URL: …</span>
+          <div class="err-fix"><strong>What to do:</strong> Re-run; if it repeats, check the portal is up and the <code>SDR_URL</code> setting.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">⑥ No CDR file to download</div>
-          <span class="role-tag role-external">In try/catch</span>
+          <div class="component-name">CDR-E06 · SDR table missing</div>
+          <span class="role-tag role-external">Gradwell SDR page</span>
         </div>
         <div class="component-desc">
-          Different from a broken download: if the SDR table has no rows,
-          or the newest row has no visible download control, clicking
-          <code>downloadButton</code> itself times out before any download
-          ever starts — a generic Playwright selector-not-found error, not
-          the <code>"Download failed"</code> message above. This is
-          distinct from the 1st-of-month freshness check (which detects
-          "the newest period exists but isn't published yet") — an empty
-          table on any other day, e.g. a brand-new account with no
-          history, surfaces as this instead.
+          The SDR page opened but no table rows appeared within 30 s. The page's own message is quoted — on 1 Oct 2026 this was <strong>"customer is required"</strong>, meaning no customer was selected.
+          <span class="err-msg">[CDR-E06] Opening the SDR page failed: the SDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/sdrs; title: "Gradwell - Admin - SDRs"; page message: "customer is required".</span>
+          <div class="err-fix"><strong>What to do:</strong> Act on the quoted page message. For "customer is required", the automation must select the customer (or open the customer-specific SDR URL) before the table can load.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">⑦ Portal layout changed</div>
-          <span class="role-tag role-external">Any selector-dependent step</span>
+          <div class="component-name">CDR-E07 · End Date cell not found</div>
+          <span class="role-tag role-security">1st of month only</span>
         </div>
         <div class="component-desc">
-          Not a single code path — if Gradwell redesigns a page, any
-          <code>page.locator(...).first()</code> call in
-          <code>src/config.js</code>'s selectors can stop matching, at
-          login, Admin/SDR navigation, the freshness-check date cell, or
-          the download button. It surfaces as a generic Playwright
-          <code>TimeoutError: waiting for selector "…" failed</code>,
-          naming the exact selector that broke — that's usually enough to
-          know what to update. Redeploy with
-          <code>DebugScreenshots=true</code> and re-invoke to see exactly
-          what the automation saw at each step before fixing the selector.
+          The table loaded but the newest row's End Date cell (<code>SELECTOR_LATEST_END_DATE_CELL</code>) isn't there — the table's columns differ from what's expected.
+          <span class="err-msg">[CDR-E07] Checking the newest SDR period is published failed: could not find the "End Date" cell of the newest SDR row (no element matched "…" within 30s) …</span>
+          <div class="err-fix"><strong>What to do:</strong> Use <code>99-failure.html</code> to find the right column and update <code>SELECTOR_LATEST_END_DATE_CELL</code>.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">⑧ S3 upload</div>
-          <span class="role-tag role-aws">In try/catch</span>
+          <div class="component-name">CDR-E08 · End Date unreadable</div>
+          <span class="role-tag role-security">1st of month only</span>
         </div>
         <div class="component-desc">
-          Rare given the scoped IAM policy, but a permissions or network
-          error on <code>PutObject</code> follows the exact same path as
-          every other failure above.
+          The End Date cell was found but its text isn't a date — the column order or date format has changed.
+          <span class="err-msg">[CDR-E08] Checking the newest SDR period is published failed: could not parse the newest SDR period's end date from "…" — the SDR table format may have changed.</span>
+          <div class="err-fix"><strong>What to do:</strong> Compare the quoted text with the table in the screenshot and fix the selector or the date parsing.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E09 · New period not published yet</div>
+          <span class="role-tag role-security">1st of month only</span>
+        </div>
+        <div class="component-desc">
+          The newest row ends before the last day of the previous month — Gradwell hasn't published the new CDR yet. Not a bug in the automation.
+          <span class="err-msg">[CDR-E09] Checking the newest SDR period is published failed: new CDR record not yet available: expected the newest SDR period to end 2026-09-30 …, but the newest row on the page ends 2026-08-31 …</span>
+          <div class="err-fix"><strong>What to do:</strong> Wait for Gradwell to publish, then re-invoke manually. The check only runs on the 1st, so a re-run on a later day downloads the newest row without it.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E10 · Download failed</div>
+          <span class="role-tag role-external">Gradwell SDR page</span>
+        </div>
+        <div class="component-desc">
+          No download started after clicking the newest row's download control, or the download broke partway through.
+          <span class="err-msg">[CDR-E10] Downloading the CDR file failed: timed out (page.waitForEvent: Timeout 60000ms exceeded while waiting for event "download") … — or — … failed: Download failed: &lt;reason&gt;.</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the screenshot for a missing or moved download icon and update <code>SELECTOR_DOWNLOAD_BUTTON</code>; re-run if it was a network blip.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E11 · S3 upload failed</div>
+          <span class="role-tag role-aws">Amazon S3</span>
+        </div>
+        <div class="component-desc">
+          The CDR file downloaded but <code>PutObject</code> to <code>cdr/…</code> failed — permissions or network.
+          <span class="err-msg">[CDR-E11] Uploading the CDR file to S3 failed: &lt;AWS error&gt;.</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the bucket exists and the role's prefix-scoped <code>s3:PutObject</code> permission.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E99 · Unexpected error</div>
+          <span class="role-tag role-aws">Anywhere</span>
+        </div>
+        <div class="component-desc">
+          Something failed outside the named steps (should be rare). The message is the raw error.
+          <span class="err-msg">&lt;raw error message&gt; — logged with "code":"CDR-E99".</span>
+          <div class="err-fix"><strong>What to do:</strong> Read the <code>stack</code> field of the <code>CDR_DOWNLOAD_FAILED</code> log line.</div>
         </div>
       </div>
     </div>
