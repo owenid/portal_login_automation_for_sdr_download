@@ -88,14 +88,17 @@ Every failure — whatever `DEBUG_SCREENSHOTS` is set to — produces:
 
 - **A descriptive error message** naming the step that failed, why, and
   what the page was showing, e.g.
-  `Opening the SDR page failed: the SDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/sdrs; title: "..."; page message: "customer is required". Failure screenshot: s3://<bucket>/debug/<run-id>/99-failure.png`
+  `[CDR-E06] Opening the SDR page failed: the SDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/sdrs; title: "..."; page message: "customer is required". Failure screenshot: s3://<bucket>/debug/<run-id>/99-failure.png`
   instead of a bare Playwright `Timeout 30000ms exceeded`. This is the
   Lambda's `errorMessage` (what `aws lambda invoke` writes to `out.json`).
+  Every failure starts with an error code (`CDR-E01`–`CDR-E11`, or
+  `CDR-E99` for anything unexpected); `architecture-summary.html` lists
+  each code with what it means and what to do.
 - **S3 debug files**: `debug/<run-id>/99-failure.png` (full-page
   screenshot) and `debug/<run-id>/99-failure.html` (the page's HTML, for
   working out the real selectors).
 - **CloudWatch Logs entries**: a JSON line with `"event":"CDR_DOWNLOAD_FAILED"`
-  holding the step, reason, run ID and the S3 locations above, plus a line
+  holding the code, step, reason, run ID and the S3 locations above, plus a line
   starting `FAILURE_SCREENSHOT_BASE64` holding a JPEG screenshot of the
   page. To turn the latest one back into an image:
 

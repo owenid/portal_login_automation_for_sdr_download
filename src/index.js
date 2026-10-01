@@ -9,16 +9,37 @@ const { getCredentials } = require("./secrets");
 const { uploadBuffer } = require("./s3");
 
 /**
- * An automation failure that names the step that failed and why, so the
- * Lambda error (and CloudWatch/Datadog) reads e.g. "Opening the SDR page
- * failed: ... Page message: "customer is required"" instead of a bare
- * Playwright "Timeout 30000ms exceeded".
+ * Stable error codes for every way a run can fail. The code leads the
+ * Lambda's errorMessage and is a field of the CDR_DOWNLOAD_FAILED log line,
+ * so a failure can be identified (and searched for in CloudWatch) without
+ * reading the full message. architecture-summary.html documents each one.
+ */
+const ERRORS = {
+  SECRETS: { code: "CDR-E01", step: "Fetching portal credentials from Secrets Manager" },
+  BROWSER: { code: "CDR-E02", step: "Launching the headless browser" },
+  LOGIN: { code: "CDR-E03", step: "Logging in to Gradwell SSO" },
+  ADMIN: { code: "CDR-E04", step: "Opening the Admin home page" },
+  SDR_PAGE: { code: "CDR-E05", step: "Opening the SDR page" },
+  SDR_TABLE_MISSING: { code: "CDR-E06", step: "Opening the SDR page" },
+  END_DATE_MISSING: { code: "CDR-E07", step: "Checking the newest SDR period is published" },
+  END_DATE_UNPARSEABLE: { code: "CDR-E08", step: "Checking the newest SDR period is published" },
+  PERIOD_NOT_PUBLISHED: { code: "CDR-E09", step: "Checking the newest SDR period is published" },
+  DOWNLOAD: { code: "CDR-E10", step: "Downloading the CDR file" },
+  S3_UPLOAD: { code: "CDR-E11", step: "Uploading the CDR file to S3" },
+};
+
+/**
+ * An automation failure that carries an error code and names the step that
+ * failed and why, so the Lambda error (and CloudWatch/Datadog) reads e.g.
+ * "[CDR-E06] Opening the SDR page failed: ... page message: "customer is
+ * required"" instead of a bare Playwright "Timeout 30000ms exceeded".
  */
 class AutomationError extends Error {
-  constructor(step, reason, options) {
-    super(`${step} failed: ${reason}`, options);
+  constructor(error, reason, options) {
+    super(`[${error.code}] ${error.step} failed: ${reason}`, options);
     this.name = "AutomationError";
-    this.step = step;
+    this.code = error.code;
+    this.step = error.step;
   }
 }
 
@@ -68,7 +89,7 @@ function summarizePage(info) {
  * a Playwright TimeoutError) as an AutomationError that names the step and
  * describes what the page was showing at the time.
  */
-async function runStep(page, step, fn) {
+async function runStep(page, error, fn) {
   try {
     return await fn();
   } catch (err) {
@@ -82,7 +103,7 @@ async function runStep(page, step, fn) {
       err.name === "TimeoutError"
         ? `timed out (${firstLine}${waitingFor ? `, waiting for ${waitingFor[1].trim()}` : ""}).`
         : `${firstLine}.`;
-    throw new AutomationError(step, `${reason} ${summarizePage(await describePage(page))}`, { cause: err });
+    throw new AutomationError(error, `${reason} ${summarizePage(await describePage(page))}`, { cause: err });
   }
 }
 
@@ -182,7 +203,7 @@ async function goToSdrSection(page) {
     );
   if (!tableLoaded) {
     throw new AutomationError(
-      "Opening the SDR page",
+      ERRORS.SDR_TABLE_MISSING,
       `the SDR table did not appear within ${config.navigationTimeoutMs / 1000}s (no element matched "${config.selectors.sdrTableRow}"). ${summarizePage(await describePage(page))}`
     );
   }
@@ -224,7 +245,7 @@ async function verifyLatestRecordIsAvailable(page) {
       .textContent({ timeout: config.navigationTimeoutMs });
   } catch (err) {
     throw new AutomationError(
-      "Checking the newest SDR period is published",
+      ERRORS.END_DATE_MISSING,
       `could not find the "End Date" cell of the newest SDR row (no element matched "${config.selectors.latestEndDateCell}" within ${config.navigationTimeoutMs / 1000}s) — the SDR table layout may differ from what's expected. ${summarizePage(await describePage(page))}`,
       { cause: err }
     );
@@ -234,15 +255,17 @@ async function verifyLatestRecordIsAvailable(page) {
   const datePart = cellText.split(",")[0].trim();
   const endDate = new Date(`${datePart} UTC`);
   if (isNaN(endDate.getTime())) {
-    throw new Error(
-      `Could not parse the latest SDR period's end date from "${cellText}" — the SDR table format may have changed.`
+    throw new AutomationError(
+      ERRORS.END_DATE_UNPARSEABLE,
+      `could not parse the newest SDR period's end date from "${cellText}" — the SDR table format may have changed.`
     );
   }
 
   const expected = lastDayOfPreviousMonthUtc();
   if (!isSameUtcCalendarDate(endDate, expected)) {
-    throw new Error(
-      `New CDR record not yet available: expected the newest SDR period to end ${expected.toISOString().slice(0, 10)} (last day of the previous month), but the newest row on the page ends ${endDate.toISOString().slice(0, 10)} ("${cellText}"). Gradwell likely hasn't published this month's CDR yet.`
+    throw new AutomationError(
+      ERRORS.PERIOD_NOT_PUBLISHED,
+      `new CDR record not yet available: expected the newest SDR period to end ${expected.toISOString().slice(0, 10)} (last day of the previous month), but the newest row on the page ends ${endDate.toISOString().slice(0, 10)} ("${cellText}"). Gradwell likely hasn't published this month's CDR yet.`
     );
   }
 }
@@ -346,7 +369,7 @@ exports.handler = async () => {
   let browser;
   let page;
   try {
-    const { username, password } = await runStep(page, "Fetching portal credentials from Secrets Manager", () =>
+    const { username, password } = await runStep(page, ERRORS.SECRETS, () =>
       getCredentials()
     );
 
@@ -356,7 +379,7 @@ exports.handler = async () => {
     // loaded with a dynamic import() instead.
     const chromium = (await import("@sparticuz/chromium")).default;
 
-    browser = await runStep(page, "Launching the headless browser", async () =>
+    browser = await runStep(page, ERRORS.BROWSER, async () =>
       playwright.launch({
         args: chromium.args,
         executablePath: await chromium.executablePath(),
@@ -368,22 +391,22 @@ exports.handler = async () => {
     const context = await browser.newContext();
     page = await context.newPage();
 
-    await runStep(page, "Logging in to Gradwell SSO", () => loginToSso(page, username, password));
+    await runStep(page, ERRORS.LOGIN, () => loginToSso(page, username, password));
     await captureDebugScreenshot(page, bucket, runId, "01-after-login");
 
-    await runStep(page, "Opening the Admin home page", () => goToAdminHome(page));
+    await runStep(page, ERRORS.ADMIN, () => goToAdminHome(page));
     await captureDebugScreenshot(page, bucket, runId, "02-admin-home");
 
-    await runStep(page, "Opening the SDR page", () => goToSdrSection(page));
+    await runStep(page, ERRORS.SDR_PAGE, () => goToSdrSection(page));
     await captureDebugScreenshot(page, bucket, runId, "03-sdr-section");
 
-    await runStep(page, "Checking the newest SDR period is published", () =>
+    await runStep(page, ERRORS.END_DATE_MISSING, () =>
       verifyLatestRecordIsAvailable(page)
     );
 
-    const { buffer, filename } = await runStep(page, "Downloading the CDR file", () => downloadCdrFile(page));
+    const { buffer, filename } = await runStep(page, ERRORS.DOWNLOAD, () => downloadCdrFile(page));
     const key = buildS3Key(filename);
-    await runStep(page, "Uploading the CDR file to S3", () => uploadBuffer(bucket, key, buffer));
+    await runStep(page, ERRORS.S3_UPLOAD, () => uploadBuffer(bucket, key, buffer));
 
     const durationMs = Date.now() - startedAt;
     console.log(`CDR file uploaded to s3://${bucket}/${key} in ${durationMs}ms`);
@@ -395,6 +418,7 @@ exports.handler = async () => {
       JSON.stringify({
         event: "CDR_DOWNLOAD_FAILED",
         runId,
+        code: err.code || "CDR-E99",
         step: err.step || "unknown",
         reason: err.message,
         durationMs,
