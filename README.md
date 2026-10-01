@@ -135,13 +135,13 @@ sam deploy --guided
 `sam deploy --guided` will prompt for a stack name and save the answers to
 `samconfig.toml` for future `sam deploy` runs.
 
-### Required: Datadog Forwarder topic ARN
+### Optional: Datadog Forwarder topic ARN
 
-This stack has one required parameter with no default:
-`DatadogForwarderTopicArn` — the ARN of your existing Datadog Forwarder's
-SNS topic (see **Alerting** under Operational notes below). `sam deploy
---guided` will prompt for it; non-interactive deploys must pass it
-explicitly:
+`DatadogForwarderTopicArn` (see **Alerting** under Operational notes below)
+defaults to an empty string, so the stack deploys fine without it — the
+CloudWatch alarm still exists, it just has no `AlarmActions`/`OKActions`
+until you supply a real Datadog Forwarder SNS topic ARN. Once that
+Forwarder exists, wire it up with:
 
 ```bash
 sam deploy --parameter-overrides DatadogForwarderTopicArn=arn:aws:sns:eu-west-2:123456789012:datadog-forwarder-topic
@@ -186,6 +186,18 @@ aws lambda invoke \
 cat out.json
 ```
 
+On success, `out.json` includes `durationMs` — wall-clock time for the whole
+run (login through S3 upload), e.g.:
+
+```json
+{"statusCode":200,"bucket":"...","key":"cdr/2026/09/...","durationMs":18342}
+```
+
+The same duration is also logged to CloudWatch on both success
+(`CDR file uploaded to s3://... in <ms>ms`) and failure
+(`CDR download automation failed after <ms>ms: ...`) — useful for spotting
+runs that are creeping toward the function's 180s timeout.
+
 Check CloudWatch Logs for the function, and the S3 bucket's `cdr/` (and, if
 `DEBUG_SCREENSHOTS=true`, `debug/`) prefixes.
 
@@ -196,16 +208,25 @@ setup.
 
 ## Operational notes
 
-- **Schedule**: EventBridge rule `cron(0 3 1 * ? *)` — 03:00 UTC on the 1st
-  of every month. Override via the `ScheduleExpression` template parameter.
+- **Schedule**: AWS EventBridge Scheduler (`MonthlyCdrDownloadSchedule`),
+  not a classic EventBridge Rule — `cron(0 9 1 * ? *)` evaluated in the
+  `ScheduleTimezone` parameter (default `Europe/London`), which fires at
+  a fixed **09:00 UK local time year-round**. EventBridge Scheduler
+  applies the GMT/BST transition automatically, so the cron expression
+  never needs to change between winter and summer. Scheduler invokes the
+  Lambda directly using `SchedulerInvokeRole`, an IAM role scoped to
+  `lambda:InvokeFunction` on just this function. Override the time via
+  `ScheduleExpression`, or the timezone via `ScheduleTimezone`.
 - **Timeout/memory**: 180s timeout, 2048 MB memory, 1024 MB of `/tmp`
   ephemeral storage — headless Chromium needs headroom; adjust in
   `template.yaml` if downloads are large or the site is slow.
 - **Alerting**: `CdrDownloaderErrorsAlarm` watches the function's `Errors`
-  metric (namespace `AWS/Lambda`) and publishes ALARM/OK state changes to
-  the SNS topic named by `DatadogForwarderTopicArn` — your existing Datadog
+  metric (namespace `AWS/Lambda`). If `DatadogForwarderTopicArn` is set, it
+  publishes ALARM/OK state changes to that SNS topic — your Datadog
   Forwarder — so a failed run surfaces as a Datadog monitor event rather
-  than sitting silently in CloudWatch Logs. Because this function only
+  than sitting silently in CloudWatch Logs. Left unset (the default), the
+  alarm still exists and is visible via CloudWatch/`describe-alarms`, it
+  just has no external notification target. Because this function only
   runs once a month, the alarm uses a 1-day evaluation period with
   `TreatMissingData: notBreaching`: a day with no invocation reads as "no
   data" rather than a false alarm, and only the scheduled run day can
