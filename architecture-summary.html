@@ -553,7 +553,9 @@
         <div class="component-desc">
           Every invocation's console output — including full Playwright error
           traces and the 1st-of-month freshness check's error message — lands
-          automatically in the function's log group. The source of truth for
+          automatically in the function's log group,
+          <code>/aws/lambda/gradwell-cdr-downloader</code>, kept for 400 days
+          (the <code>LogRetentionInDays</code> parameter). The source of truth for
           why a run succeeded or failed.
         </div>
       </div>
@@ -790,7 +792,7 @@
 
         <!-- Note: log write -->
         <rect x="700" y="814" width="330" height="46" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
-        <text x="865" y="833" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">/aws/lambda/CdrDownloaderFunction-…</text>
+        <text x="865" y="833" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">/aws/lambda/gradwell-cdr-downloader</text>
         <text x="865" y="848" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink-muted)">gets code, reason + screenshot — separate from the metric</text>
 
         <line x1="865" y1="860" x2="865" y2="870" stroke="var(--rule)" stroke-width="1.2" marker-end="url(#seqArrowSad)" />
@@ -838,7 +840,7 @@
     <ol class="steps">
       <li>Read the code and message in <code>out.json</code>, or search CloudWatch Logs for <code>CDR_DOWNLOAD_FAILED</code>.</li>
       <li>Look up the code below for what it means and what to do.</li>
-      <li>Open the screenshot: download the S3 path from the message, or decode the latest CloudWatch copy with <code>aws logs filter-log-events --log-group-name /aws/lambda/&lt;function&gt; --filter-pattern '"FAILURE_SCREENSHOT_BASE64"' --query 'events[-1].message' --output text | sed 's/.*FAILURE_SCREENSHOT_BASE64 //' | base64 -d &gt; failure.jpg</code></li>
+      <li>Open the screenshot: download the S3 path from the message, or decode the latest CloudWatch copy with <code>aws logs filter-log-events --log-group-name /aws/lambda/gradwell-cdr-downloader --filter-pattern '"FAILURE_SCREENSHOT_BASE64"' --query 'events[-1].message' --output text | sed 's/.*FAILURE_SCREENSHOT_BASE64 //' | base64 -d &gt; failure.jpg</code></li>
       <li>If a selector needs changing, use <code>99-failure.html</code> to find the right element.</li>
       <li>Fix, redeploy if needed, then re-invoke (see Recovery below).</li>
     </ol>
@@ -1046,6 +1048,7 @@
       <div class="fact"><span class="fact-label">Memory</span><span class="fact-value">2048 MB</span></div>
       <div class="fact"><span class="fact-label">Timeout</span><span class="fact-value">180s</span></div>
       <div class="fact"><span class="fact-label">Schedule</span><span class="fact-value">09:00 Europe/London</span></div>
+      <div class="fact"><span class="fact-label">Log retention</span><span class="fact-value">400 days</span></div>
     </div>
   </section>
 

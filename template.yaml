@@ -60,6 +60,15 @@ Parameters:
       supply its ARN via --parameter-overrides
       DatadogForwarderTopicArn=<arn> to wire up notifications.
 
+  LogRetentionInDays:
+    Type: Number
+    Default: 400
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653]
+    Description: >
+      How long CloudWatch Logs keeps the function's logs. The default (400
+      days) keeps every monthly run for just over a year, so a failure can
+      be compared with the same month last year.
+
 Conditions:
   HasDatadogForwarderTopicArn: !Not [!Equals [!Ref DatadogForwarderTopicArn, ""]]
 
@@ -83,6 +92,20 @@ Resources:
             Status: Enabled
             ExpirationInDays: 30
 
+  # The function's log group, created here so its retention is managed by
+  # the stack. It has its own name rather than Lambda's default
+  # /aws/lambda/<function name>: that group already existed (Lambda creates
+  # it on first run), and CloudFormation can't take over an existing log
+  # group in a normal deploy. Retained on stack deletion so run history
+  # isn't lost with the stack.
+  CdrDownloaderLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}"
+      RetentionInDays: !Ref LogRetentionInDays
+
   CdrDownloaderFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -95,6 +118,11 @@ Resources:
       Timeout: 180
       EphemeralStorage:
         Size: 1024
+      LoggingConfig:
+        LogGroup: !Ref CdrDownloaderLogGroup
+        # Plain-text lines (timestamp, request ID, level, message), which the
+        # CloudWatch commands in the README and docs rely on.
+        LogFormat: Text
       Environment:
         Variables:
           CDR_BUCKET_NAME: !Ref CdrBucket
@@ -201,3 +229,6 @@ Outputs:
       EventBridge Scheduler schedule ARN that triggers the download at a
       fixed local time (see ScheduleTimezone)
     Value: !GetAtt MonthlyCdrDownloadSchedule.Arn
+  CdrDownloaderLogGroupName:
+    Description: CloudWatch Logs log group the function writes to
+    Value: !Ref CdrDownloaderLogGroup
