@@ -1,0 +1,84 @@
+"use strict";
+
+function env(name, fallback) {
+  const value = process.env[name];
+  return value === undefined || value === "" ? fallback : value;
+}
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+const config = {
+  ssoUrl: env("SSO_URL", "https://sso.prod.gradwell.com"),
+  adminHomeUrl: env("ADMIN_HOME_URL", "https://admin.prod.gradwell.com/home"),
+  cdrUrl: env("CDR_URL", "https://admin.prod.gradwell.com/cdrs"),
+
+  // CSS/text selectors for each step of the journey. These are best-effort
+  // defaults based on common portal patterns and have NOT been verified
+  // against the live Gradwell site. Override any of them via environment
+  // variables (see README) once you have inspected the real DOM, without
+  // needing a code change or redeploy.
+  selectors: {
+    usernameInput: env(
+      "SELECTOR_USERNAME_INPUT",
+      'input[name="username"], input[type="email"], #username'
+    ),
+    passwordInput: env(
+      "SELECTOR_PASSWORD_INPUT",
+      'input[name="password"], input[type="password"], #password'
+    ),
+    loginButton: env(
+      "SELECTOR_LOGIN_BUTTON",
+      'button[type="submit"], input[type="submit"]'
+    ),
+    adminOption: env("SELECTOR_ADMIN_OPTION", 'a:has-text("Admin")'),
+    sdrOption: env("SELECTOR_SDR_OPTION", 'a:has-text("SDR")'),
+    // The SDR list is a table (Start Date / End Date / Download columns)
+    // sorted newest-first, with an icon-only download control (no text) in
+    // the last cell of each row. Scoping to the first data row's clickable
+    // control both finds it and picks the latest period.
+    downloadButton: env(
+      "SELECTOR_DOWNLOAD_BUTTON",
+      "table tbody tr:first-child td:last-child a, table tbody tr:first-child td:last-child button, table tbody tr:first-child a, table tbody tr:first-child button"
+    ),
+    // "End Date" is the 2nd column (Start Date / End Date / Download) of the
+    // newest (first) row.
+    latestEndDateCell: env(
+      "SELECTOR_LATEST_END_DATE_CELL",
+      "table tbody tr:first-child td:nth-child(2)"
+    ),
+    // Any row of the SDR table. Its presence is what "the SDR list loaded"
+    // means; if it never appears, the page is showing something else
+    // instead (e.g. an error such as "customer is required").
+    sdrTableRow: env("SELECTOR_SDR_TABLE_ROW", "table tbody tr"),
+    // Elements that typically hold an on-page error/validation message.
+    // Their visible text is quoted in failure messages so the Lambda error
+    // says *why* a step failed rather than just "Timeout exceeded".
+    pageErrorMessage: env(
+      "SELECTOR_PAGE_ERROR_MESSAGE",
+      '[role="alert"], .alert, .error, .error-message, .text-danger, .invalid-feedback, [class*="error" i]'
+    ),
+  },
+
+  navigationTimeoutMs: Number(env("NAVIGATION_TIMEOUT_MS", "30000")),
+  downloadTimeoutMs: Number(env("DOWNLOAD_TIMEOUT_MS", "60000")),
+
+  // Set DEBUG_SCREENSHOTS=true to upload a screenshot to S3 after every step
+  // (debug/<run-id>/<step>.png). Invaluable for tuning selectors against the
+  // real site without shell access to the Lambda. Failures are always
+  // captured (screenshot + HTML to S3, screenshot to CloudWatch Logs)
+  // regardless of this setting.
+  debugScreenshots: env("DEBUG_SCREENSHOTS", "false") === "true",
+
+  // A downloaded CDR file smaller than this is treated as headers only. Used
+  // by the monthly delivery check; the template's file-too-small alarm uses
+  // the same value (the MinCdrFileBytes parameter).
+  minCdrFileBytes: Number(env("MIN_CDR_FILE_BYTES", "1024")),
+};
+
+module.exports = { config, env, requireEnv };

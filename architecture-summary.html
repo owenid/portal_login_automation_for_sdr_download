@@ -1,0 +1,1098 @@
+<title>Gradwell CDR Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F4F7F6;
+    --surface: #FFFFFF;
+    --surface-2: #EAF0EF;
+    --ink: #152227;
+    --ink-muted: #4E6167;
+    --border: #D5E1DF;
+    --rule: #C9D6D3;
+
+    --aws: #3E5468;
+    --aws-soft: #E8ECEF;
+    --external: #0E9C87;
+    --external-soft: #DFF4EF;
+    --security: #9C6B18;
+    --security-soft: #F6EAD3;
+
+    --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E1416;
+      --surface: #161E21;
+      --surface-2: #1B2528;
+      --ink: #E7EEEC;
+      --ink-muted: #9AB0AC;
+      --border: #283436;
+      --rule: #2A3538;
+
+      --aws: #93A8B8;
+      --aws-soft: #212B30;
+      --external: #3FE0C6;
+      --external-soft: #123430;
+      --security: #E3B45C;
+      --security-soft: #35291A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0E1416;
+    --surface: #161E21;
+    --surface-2: #1B2528;
+    --ink: #E7EEEC;
+    --ink-muted: #9AB0AC;
+    --border: #283436;
+    --rule: #2A3538;
+
+    --aws: #93A8B8;
+    --aws-soft: #212B30;
+    --external: #3FE0C6;
+    --external-soft: #123430;
+    --security: #E3B45C;
+    --security-soft: #35291A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    margin: 0;
+    padding-inline: 20px;
+    padding-block: 40px 64px;
+  }
+
+  main {
+    max-width: 980px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--external);
+    font-weight: 600;
+  }
+
+  h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 700;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .lede {
+    font-size: 16px;
+    color: var(--ink-muted);
+    max-width: 62ch;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  h2 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-muted);
+    margin: 0 0 16px 0;
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 24px 0 4px 0;
+  }
+
+  section { display: flex; flex-direction: column; }
+
+  /* ---- Diagram ---- */
+
+  figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  figure svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  figcaption {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .swatch {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    flex: none;
+  }
+
+  .sw-aws { background: var(--aws); }
+  .sw-external { background: var(--external); }
+  .sw-security { background: var(--security); }
+
+  /* ---- Component list ---- */
+
+  .components {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .component {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .component:last-child { border-bottom: none; }
+
+  .component-id {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .component-name {
+    font-family: var(--font-mono);
+    font-size: 14.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .role-tag {
+    align-self: flex-start;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+
+  .role-aws { color: var(--aws); background: var(--aws-soft); }
+  .role-external { color: var(--external); background: var(--external-soft); }
+  .role-security { color: var(--security); background: var(--security-soft); }
+
+  .component-desc {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink);
+    max-width: 64ch;
+  }
+
+  .err-msg {
+    display: block;
+    margin: 8px 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .err-fix { margin-top: 6px; }
+  .steps { margin: 12px 0 20px; padding-left: 22px; line-height: 1.6; }
+  .steps li { margin-bottom: 6px; }
+  .steps-note { margin: -8px 0 20px; line-height: 1.6; max-width: 75ch; }
+  .steps-note code { font-family: var(--font-mono); font-size: 0.92em; }
+  .steps code, .err-fix code { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: anywhere; }
+  .component-desc code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    background: var(--surface-2);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+  }
+
+  /* ---- Facts strip ---- */
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .fact {
+    background: var(--surface);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .fact-label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+    font-weight: 600;
+  }
+
+  .fact-value {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- Gap note ---- */
+
+  .gap-note {
+    display: flex;
+    gap: 14px;
+    padding: 18px 20px;
+    background: var(--security-soft);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .gap-note .mark {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--security);
+    flex: none;
+  }
+
+  .gap-note strong { color: var(--ink); }
+
+  @media (max-width: 620px) {
+    .component { grid-template-columns: 1fr; gap: 10px; }
+  }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">AWS architecture reference</div>
+    <h1>Gradwell CDR Pipeline</h1>
+    <p class="lede">
+      A scheduled Lambda that logs into the Gradwell SSO/Admin portal, downloads the
+      latest SDR call-detail-record file, and stores it in S3 — running unattended
+      on the 1st of every month.
+    </p>
+  </header>
+
+  <section>
+    <h2>System diagram</h2>
+    <figure>
+      <svg viewBox="0 0 1040 620" role="img" aria-label="AWS EventBridge Scheduler triggers an AWS Lambda function monthly at a fixed UK local time, DST-aware. The Lambda reads credentials from Secrets Manager, drives a headless browser through the external Gradwell SSO, Admin and CDR pages, and on the 1st of the month verifies the newest CDR period has actually been published before downloading it — throwing an error to CloudWatch instead if it hasn't. On success it writes the file to an S3 bucket, with every step's logs landing in CloudWatch — all inside a narrowly scoped IAM role.">
+
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- IAM boundary around Lambda -->
+        <rect x="278" y="196" width="248" height="188" rx="14" fill="none" stroke="var(--security)" stroke-width="1.5" stroke-dasharray="5 5" />
+        <text x="402" y="186" text-anchor="middle" font-family="var(--font-mono)" font-size="11" font-weight="600" fill="var(--security)" letter-spacing="0.03em">IAM EXECUTION ROLE · LEAST PRIVILEGE</text>
+
+        <!-- EventBridge -->
+        <rect x="24" y="248" width="176" height="80" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="112" y="272" text-anchor="middle" font-family="var(--font-sans)" font-size="13" font-weight="600" fill="var(--ink)">AWS EventBridge Scheduler</text>
+        <text x="112" y="291" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">cron(0 9 1 * ? *)</text>
+        <text x="112" y="307" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">Europe/London</text>
+        <text x="112" y="323" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">09:00 UK local, DST-aware</text>
+
+        <!-- EventBridge -> Lambda -->
+        <line x1="200" y1="288" x2="270" y2="288" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow)" />
+        <text x="235" y="278" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">triggers</text>
+
+        <!-- Lambda -->
+        <rect x="300" y="220" width="200" height="140" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="400" y="252" text-anchor="middle" font-family="var(--font-sans)" font-size="14" font-weight="700" fill="var(--ink)">AWS Lambda</text>
+        <text x="400" y="272" text-anchor="middle" font-family="var(--font-mono)" font-size="11" fill="var(--ink-muted)">CdrDownloaderFunction</text>
+        <line x1="320" y1="284" x2="480" y2="284" stroke="var(--rule)" stroke-width="1" />
+        <text x="400" y="302" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--ink-muted)">Node.js 22 · x86_64</text>
+        <text x="400" y="318" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--ink-muted)">Playwright + Chromium</text>
+        <text x="400" y="340" text-anchor="middle" font-family="var(--font-sans)" font-size="11" fill="var(--ink-muted)">2048 MB · 180s timeout</text>
+
+        <!-- Secrets Manager -->
+        <rect x="660" y="40" width="220" height="84" rx="10" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+        <text x="770" y="70" text-anchor="middle" font-family="var(--font-sans)" font-size="13.5" font-weight="600" fill="var(--ink)">AWS Secrets Manager</text>
+        <text x="770" y="90" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">prod/AdminPortal/Gradwell</text>
+        <text x="770" y="106" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">username + password</text>
+
+        <!-- Lambda -> Secrets Manager -->
+        <path d="M500,250 C 570,250 570,90 655,85" fill="none" stroke="var(--security)" stroke-width="1.5" marker-end="url(#arrow)" />
+        <text x="588" y="170" font-family="var(--font-mono)" font-size="10.5" fill="var(--security)">① GetSecretValue</text>
+
+        <!-- External Gradwell container -->
+        <rect x="660" y="152" width="356" height="260" rx="14" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1.5" stroke-dasharray="4 4" />
+        <text x="678" y="175" font-family="var(--font-mono)" font-size="10.5" font-weight="600" fill="var(--external)" letter-spacing="0.03em">EXTERNAL · THIRD PARTY</text>
+
+        <rect x="678" y="188" width="320" height="46" rx="8" fill="var(--surface)" stroke="var(--external)" stroke-width="1" />
+        <text x="838" y="207" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">SSO login</text>
+        <text x="838" y="223" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">sso.prod.gradwell.com</text>
+
+        <line x1="838" y1="234" x2="838" y2="248" stroke="var(--external)" stroke-width="1.5" marker-end="url(#arrow)" />
+
+        <rect x="678" y="250" width="320" height="46" rx="8" fill="var(--surface)" stroke="var(--external)" stroke-width="1" />
+        <text x="838" y="269" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">Admin home</text>
+        <text x="838" y="285" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">admin.prod.gradwell.com/home</text>
+
+        <line x1="838" y1="296" x2="838" y2="310" stroke="var(--external)" stroke-width="1.5" marker-end="url(#arrow)" />
+
+        <rect x="678" y="312" width="320" height="50" rx="8" fill="var(--surface)" stroke="var(--external)" stroke-width="1" />
+        <text x="838" y="331" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">CDR list → verify + download latest</text>
+        <text x="838" y="347" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">admin.prod.gradwell.com/cdrs</text>
+
+        <!-- 1st-of-month freshness check annotation -->
+        <text x="838" y="380" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="600" fill="var(--security)">1st of month only: newest period not yet published</text>
+        <text x="838" y="394" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--security)">→ throws instead of downloading (→ CloudWatch, below)</text>
+
+        <!-- Lambda -> Gradwell -->
+        <line x1="500" y1="288" x2="655" y2="255" stroke="var(--external)" stroke-width="1.5" marker-end="url(#arrow)" />
+        <text x="520" y="262" font-family="var(--font-mono)" font-size="10.5" fill="var(--external)">② browser automation</text>
+
+        <!-- S3 -->
+        <rect x="660" y="444" width="220" height="90" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="770" y="472" text-anchor="middle" font-family="var(--font-sans)" font-size="13.5" font-weight="600" fill="var(--ink)">Amazon S3</text>
+        <text x="770" y="492" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">cdr/&lt;year&gt;/&lt;month&gt;/…</text>
+        <text x="770" y="508" text-anchor="middle" font-family="var(--font-mono)" font-size="10.5" fill="var(--ink-muted)">debug/ (30-day expiry)</text>
+        <text x="770" y="524" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">private · SSE-AES256</text>
+
+        <!-- Lambda -> S3 -->
+        <path d="M500,330 C 570,330 570,480 655,485" fill="none" stroke="var(--aws)" stroke-width="1.5" marker-end="url(#arrow)" />
+        <text x="588" y="460" font-family="var(--font-mono)" font-size="10.5" fill="var(--aws)">③ PutObject</text>
+
+        <!-- CloudWatch Logs -->
+        <rect x="300" y="440" width="200" height="60" rx="10" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5" />
+        <text x="400" y="465" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink-muted)">CloudWatch Logs</text>
+        <text x="400" y="483" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" fill="var(--ink-muted)">execution + error traces</text>
+
+        <line x1="400" y1="360" x2="400" y2="435" stroke="var(--rule)" stroke-width="1.5" marker-end="url(#arrow)" />
+
+      </svg>
+      <figcaption>
+        Once a month, EventBridge Scheduler starts the Lambda at a fixed UK
+        local time. Inside one invocation, it reads
+        the portal credentials from Secrets Manager, drives a real Chromium session
+        through Gradwell's SSO and Admin pages to the CDR list (<code>/cdrs</code>), and — only on the
+        1st of the month — checks that the newest period has actually been
+        published before downloading it, throwing an error instead if it hasn't.
+        On success it writes the file to S3 — with every step's logs landing in
+        CloudWatch and the whole function boxed into a narrowly-scoped IAM role.
+      </figcaption>
+      <div class="legend">
+        <span><i class="swatch sw-aws"></i>AWS-owned resource</span>
+        <span><i class="swatch sw-external"></i>External · Gradwell (third-party)</span>
+        <span><i class="swatch sw-security"></i>Security boundary</span>
+      </div>
+    </figure>
+  </section>
+
+  <section>
+    <h2>What each component does</h2>
+    <div class="components">
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">AWS EventBridge Scheduler</div>
+          <span class="role-tag role-aws">Trigger</span>
+        </div>
+        <div class="component-desc">
+          <code>MonthlyCdrDownloadSchedule</code> fires the Lambda on
+          <code>cron(0 9 1 * ? *)</code>, evaluated in the
+          <code>Europe/London</code> timezone — a fixed <strong>09:00 UK
+          local time</strong> every 1st of the month, year-round.
+          Scheduler applies the GMT/BST transition automatically (unlike a
+          classic EventBridge Rule, which is UTC-only), and invokes the
+          function directly via <code>SchedulerInvokeRole</code>, an IAM
+          role scoped to <code>lambda:InvokeFunction</code> on just this
+          function. Nothing else in the system runs unless this schedule
+          fires, or someone invokes the function manually for testing.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">AWS Lambda</div>
+          <span class="role-tag role-aws">Compute</span>
+        </div>
+        <div class="component-desc">
+          <code>CdrDownloaderFunction</code> — the entire mechanism runs inside one
+          invocation. Node.js 22.x on x86_64, 2048 MB memory, a 180-second timeout,
+          and 1024 MB of <code>/tmp</code>. Drives a real headless Chromium session
+          via <code>playwright-core</code> and <code>@sparticuz/chromium</code> to
+          perform the login, navigation, and file download exactly as a person
+          would in a browser. Measures its own wall-clock duration and returns
+          it as <code>durationMs</code> in the response (and logs it on
+          failure too), so a run creeping toward the timeout is easy to spot.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">IAM execution role</div>
+          <span class="role-tag role-security">Access control</span>
+        </div>
+        <div class="component-desc">
+          Scoped narrowly on purpose: <code>secretsmanager:GetSecretValue</code>
+          only on the named secret's ARN pattern, and <code>s3:PutObject</code>
+          limited to the <code>cdr/*</code> and <code>debug/*</code> prefixes
+          of the CDR bucket — not the bucket as a whole. The function holds
+          no broader AWS permissions — it can't read other secrets, write
+          outside those two prefixes, or touch other buckets.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">AWS Secrets Manager</div>
+          <span class="role-tag role-security">Secret</span>
+        </div>
+        <div class="component-desc">
+          <code>prod/AdminPortal/Gradwell</code> holds the portal username and
+          password as a JSON key pair. Pre-existing — this stack reads it but
+          never creates, owns, or writes its value. Fetched fresh on every
+          invocation; never cached, logged, or written to disk.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Gradwell SSO / Admin Portal</div>
+          <span class="role-tag role-external">External system</span>
+        </div>
+        <div class="component-desc">
+          Not part of this AWS account — a third-party customer/reseller portal
+          reached over the public internet. The Lambda logs in at
+          <code>sso.prod.gradwell.com</code>, lands on
+          <code>admin.prod.gradwell.com/home</code>, then
+          <code>/cdrs</code>, where a table sorted newest-first lists each
+          billing period. On the 1st of the month it first confirms the
+          newest row's End Date is the last day of the previous month — the
+          period that should have just completed — and throws an error
+          instead of downloading if Gradwell hasn't published it yet;
+          otherwise it clicks the first row's download control to fetch the
+          latest CDR file.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Amazon S3</div>
+          <span class="role-tag role-aws">Storage</span>
+        </div>
+        <div class="component-desc">
+          <code>CdrBucket</code> — private, SSE-AES256 encrypted, all public
+          access blocked. Downloaded files land under
+          <code>cdr/&lt;year&gt;/&lt;month&gt;/</code>; optional per-step debug
+          screenshots land under <code>debug/</code> and auto-expire after 30
+          days via a lifecycle rule.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">Amazon CloudWatch Logs</div>
+          <span class="role-tag role-aws">Observability</span>
+        </div>
+        <div class="component-desc">
+          Every invocation's console output — including full Playwright error
+          traces and the 1st-of-month freshness check's error message — lands
+          automatically in the function's log group,
+          <code>/aws/lambda/gradwell-cdr-downloader</code>, kept for 400 days
+          (the <code>LogRetentionInDays</code> parameter). The source of truth for
+          why a run succeeded or failed.
+        </div>
+      </div>
+
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CdrDownloaderErrorsAlarm</div>
+          <span class="role-tag role-aws">Alerting</span>
+        </div>
+        <div class="component-desc">
+          CloudWatch alarm on the function's <code>Errors</code> metric
+          (namespace <code>AWS/Lambda</code>). Uses a 1-day evaluation
+          period with <code>TreatMissingData: notBreaching</code>, since the
+          function only runs once a month — an idle day reads as "no data,"
+          not a failure. If <code>DatadogForwarderTopicArn</code> is set, it
+          publishes ALARM/OK transitions to that SNS topic for the Datadog
+          Forwarder to consume; left unset (the default), the alarm still
+          exists and is visible via CloudWatch, just without an external
+          notification target.
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Sequence flow — happy path</h2>
+    <figure>
+      <svg viewBox="0 0 1040 720" role="img" aria-label="Sequence diagram of a successful run: EventBridge Scheduler invokes the Lambda, which fetches credentials from Secrets Manager, logs into Gradwell, navigates to the CDR list, confirms the newest period has been published on the 1st of the month, downloads the CDR file, uploads it to S3, logs success with the run's duration, and returns.">
+        <defs>
+          <marker id="seqArrowHappy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <!-- Actor headers -->
+        <g font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)" text-anchor="middle">
+          <rect x="0" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="70" y="46">EventBridge<tspan x="70" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Scheduler</tspan></text>
+
+          <rect x="185" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="255" y="46">CdrDownloader<tspan x="255" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Function</tspan></text>
+
+          <rect x="370" y="20" width="140" height="44" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+          <text x="440" y="46">Secrets<tspan x="440" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Manager</tspan></text>
+
+          <rect x="565" y="20" width="140" height="44" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1.5" />
+          <text x="635" y="46">Gradwell<tspan x="635" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">SSO / Admin / SDR</tspan></text>
+
+          <rect x="750" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="820" y="46">Amazon<tspan x="820" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">S3</tspan></text>
+
+          <rect x="895" y="20" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5" />
+          <text x="965" y="46" fill="var(--ink-muted)">CloudWatch</text>
+        </g>
+
+        <!-- Lifelines -->
+        <g stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="3 4">
+          <line x1="70" y1="64" x2="70" y2="690" />
+          <line x1="255" y1="64" x2="255" y2="690" />
+          <line x1="440" y1="64" x2="440" y2="690" />
+          <line x1="635" y1="64" x2="635" y2="690" />
+          <line x1="820" y1="64" x2="820" y2="690" />
+          <line x1="965" y1="64" x2="965" y2="690" />
+        </g>
+
+        <!-- Messages -->
+        <g font-family="var(--font-sans)" font-size="10.5" fill="var(--ink)" text-anchor="middle" color="var(--aws)">
+          <line x1="70" y1="110" x2="248" y2="110" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="162" y="102">invoke() — 09:00 Europe/London, monthly</text>
+
+          <line x1="255" y1="152" x2="433" y2="152" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="347" y="144">GetSecretValue</text>
+
+          <line x1="440" y1="194" x2="262" y2="194" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="347" y="186">{username, password}</text>
+
+          <line x1="255" y1="236" x2="628" y2="236" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="228">SSO login</text>
+
+          <line x1="635" y1="278" x2="262" y2="278" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="270">authenticated session</text>
+
+          <line x1="255" y1="320" x2="628" y2="320" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="312">Admin → CDR navigation</text>
+
+          <line x1="255" y1="362" x2="628" y2="362" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="354">read newest row (1st-of-month check)</text>
+
+          <line x1="635" y1="404" x2="262" y2="404" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="396">End Date = expected period ✓</text>
+
+          <line x1="255" y1="446" x2="628" y2="446" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="438">click download (newest row)</text>
+
+          <line x1="635" y1="488" x2="262" y2="488" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="441" y="480">CDR file stream</text>
+
+          <line x1="255" y1="530" x2="813" y2="530" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="533" y="522">PutObject cdr/&lt;yyyy&gt;/&lt;mm&gt;/…</text>
+
+          <line x1="820" y1="572" x2="262" y2="572" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="533" y="564">200 OK</text>
+
+          <line x1="255" y1="614" x2="958" y2="614" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
+          <text x="610" y="606">log success + durationMs</text>
+
+          <line x1="255" y1="656" x2="77" y2="656" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowHappy)" />
+          <text x="162" y="648">return {200, bucket, key, durationMs}</text>
+        </g>
+      </svg>
+      <figcaption>
+        Every message on the left runs inside the one Lambda invocation the
+        Scheduler starts. Solid arrows are calls, dashed arrows are returns.
+        The 1st-of-month freshness check is the only conditional step —
+        it's a no-op (immediately returns) on any other day.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Sequence flow — unhappy path</h2>
+    <figure>
+      <svg viewBox="0 0 1040 1040" role="img" aria-label="Sequence diagram showing every unhappy-path branch on the same message flow as the happy path. Error-code markers show where each failure can occur: CDR-E01 secret fetch, CDR-E02 browser launch, CDR-E03 SSO login, CDR-E04 to E06 Admin and CDR navigation including the CDR table not appearing, CDR-E07 to E09 the 1st-of-month freshness check, CDR-E10 download, and CDR-E11 S3 upload. Whichever one throws, execution converges on the same shared outcome: the Lambda's catch block always saves a failure screenshot and the page HTML to S3, logs the screenshot and a CDR_DOWNLOAD_FAILED JSON line with the code, step and reason to CloudWatch Logs, and rethrows with an errorMessage that starts with the code. AWS separately records an Errors metric increment; after a one-day evaluation period this trips the CloudWatch alarm, which — if a Datadog Forwarder topic ARN is configured — reaches Datadog as a monitor event, otherwise it is visible only via CloudWatch.">
+        <defs>
+          <marker id="seqArrowSad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <g font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)" text-anchor="middle">
+          <rect x="0" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="70" y="46">EventBridge<tspan x="70" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Scheduler</tspan></text>
+
+          <rect x="185" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="255" y="46">CdrDownloader<tspan x="255" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Function</tspan></text>
+
+          <rect x="370" y="20" width="140" height="44" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+          <text x="440" y="46">Secrets<tspan x="440" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">Manager</tspan></text>
+
+          <rect x="565" y="20" width="140" height="44" rx="8" fill="var(--external-soft)" stroke="var(--external)" stroke-width="1.5" />
+          <text x="635" y="46">Gradwell<tspan x="635" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">SSO / Admin / SDR</tspan></text>
+
+          <rect x="750" y="20" width="140" height="44" rx="8" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+          <text x="820" y="46">Amazon<tspan x="820" dy="14" font-size="10" font-weight="400" fill="var(--ink-muted)">S3</tspan></text>
+
+          <rect x="895" y="20" width="140" height="44" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5" />
+          <text x="965" y="46" fill="var(--ink-muted)">CloudWatch</text>
+        </g>
+
+        <!-- Cross-cutting note: layout changed -->
+        <rect x="770" y="80" width="260" height="66" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="900" y="98" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="700" fill="var(--security)">Portal layout changed</text>
+        <text x="900" y="113" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">Surfaces as the code of the step it</text>
+        <text x="900" y="126" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">broke (E03–E10), naming the selector</text>
+        <text x="900" y="139" text-anchor="middle" font-family="var(--font-sans)" font-size="9" fill="var(--ink)">and quoting what the page showed</text>
+
+        <g stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="3 4">
+          <line x1="70" y1="64" x2="70" y2="690" />
+          <line x1="255" y1="64" x2="255" y2="690" />
+          <line x1="440" y1="64" x2="440" y2="690" />
+          <line x1="635" y1="64" x2="635" y2="690" />
+          <line x1="820" y1="64" x2="820" y2="690" />
+          <line x1="965" y1="64" x2="965" y2="690" />
+        </g>
+
+        <g font-family="var(--font-sans)" font-size="10.5" fill="var(--ink)" text-anchor="middle">
+          <line x1="70" y1="110" x2="248" y2="110" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="162" y="102">invoke()</text>
+
+          <line x1="255" y1="152" x2="433" y2="152" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="347" y="144">GetSecretValue</text>
+
+          <line x1="440" y1="194" x2="262" y2="194" stroke="var(--aws)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="347" y="186">{username, password}</text>
+          <text x="468" y="198" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E01</text>
+          <text x="162" y="126" fill="var(--security)" font-weight="700" font-size="11">E02 browser launch</text>
+
+          <line x1="255" y1="236" x2="628" y2="236" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="228">SSO login</text>
+          <text x="643" y="240" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E03</text>
+
+          <line x1="635" y1="278" x2="262" y2="278" stroke="var(--external)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="270">authenticated session</text>
+
+          <line x1="255" y1="320" x2="628" y2="320" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="312">Admin → CDR navigation</text>
+          <text x="643" y="324" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E04–E06</text>
+
+          <line x1="255" y1="362" x2="628" y2="362" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="354">read newest row (1st-of-month check)</text>
+          <text x="643" y="366" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E07–E09</text>
+
+          <line x1="635" y1="404" x2="262" y2="404" stroke="var(--external)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="396">End Date = expected period ✓</text>
+
+          <line x1="255" y1="446" x2="628" y2="446" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="438">click download (newest row)</text>
+          <text x="643" y="450" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E10</text>
+
+          <line x1="635" y1="488" x2="262" y2="488" stroke="var(--external)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="441" y="480">CDR file stream</text>
+
+          <line x1="255" y1="530" x2="813" y2="530" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="533" y="522">PutObject cdr/&lt;yyyy&gt;/&lt;mm&gt;/…</text>
+          <text x="828" y="534" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E11</text>
+
+          <line x1="820" y1="572" x2="262" y2="572" stroke="var(--aws)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="533" y="564">200 OK</text>
+
+          <line x1="255" y1="614" x2="958" y2="614" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
+          <text x="610" y="606">log success + durationMs</text>
+
+          <line x1="255" y1="656" x2="77" y2="656" stroke="var(--aws)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="162" y="648">return {200, bucket, key, durationMs}</text>
+        </g>
+
+        <!-- Convergence: any numbered failure enters the catch block here -->
+        <line x1="255" y1="690" x2="255" y2="718" stroke="var(--security)" stroke-width="1.6" marker-end="url(#seqArrowSad)" />
+        <text x="255" y="710" text-anchor="middle" font-family="var(--font-sans)" font-size="10.5" font-weight="700" fill="var(--security)">CDR-E01 … E11 — any failure enters here</text>
+
+        <!-- Note: catch block -->
+        <rect x="290" y="716" width="500" height="58" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="540" y="737" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">catch(err): captureFailure() — always, whatever DEBUG_SCREENSHOTS is</text>
+        <text x="540" y="755" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">→ S3 debug/&lt;run-id&gt;/99-failure.png + 99-failure.html</text>
+
+        <g font-family="var(--font-sans)" font-size="10.5" text-anchor="middle">
+          <line x1="255" y1="800" x2="958" y2="800" stroke="var(--security)" stroke-width="1.6" marker-end="url(#seqArrowSad)" />
+          <text x="610" y="792" fill="var(--security)" font-weight="600">log screenshot + CDR_DOWNLOAD_FAILED {code, step, reason}, then throw</text>
+
+          <line x1="255" y1="842" x2="77" y2="842" stroke="var(--security)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#seqArrowSad)" />
+          <text x="162" y="834" fill="var(--security)" font-weight="600">errorMessage "[CDR-Exx] &lt;step&gt; failed: …"</text>
+        </g>
+
+        <!-- Note: log write -->
+        <rect x="700" y="814" width="330" height="46" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="865" y="833" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">/aws/lambda/gradwell-cdr-downloader</text>
+        <text x="865" y="848" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink-muted)">gets code, reason + screenshot — separate from the metric</text>
+
+        <line x1="865" y1="860" x2="865" y2="870" stroke="var(--rule)" stroke-width="1.2" marker-end="url(#seqArrowSad)" />
+
+        <!-- Notes: metric -> alarm -> datadog -->
+        <rect x="700" y="872" width="330" height="48" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="865" y="892" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">AWS separately records +1 on the Errors metric</text>
+        <text x="865" y="907" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">(namespace AWS/Lambda) — not derived from the log text</text>
+
+        <line x1="865" y1="920" x2="865" y2="942" stroke="var(--rule)" stroke-width="1.2" marker-end="url(#seqArrowSad)" />
+
+        <rect x="700" y="944" width="330" height="48" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="865" y="964" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">1-day evaluation, notBreaching default</text>
+        <text x="865" y="979" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">→ ALARM if ≥1 error that day</text>
+
+        <rect x="60" y="944" width="330" height="60" rx="8" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.2" stroke-dasharray="4 4" />
+        <text x="225" y="962" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="600" fill="var(--security)">DatadogForwarderTopicArn set?</text>
+        <text x="225" y="978" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink)">Yes → SNS → Datadog Forwarder → monitor event</text>
+        <text x="225" y="992" text-anchor="middle" font-family="var(--font-sans)" font-size="9.5" fill="var(--ink)">No (default) → check via CloudWatch only</text>
+
+        <line x1="700" y1="974" x2="393" y2="974" stroke="var(--rule)" stroke-width="1.2" stroke-dasharray="2 3" marker-end="url(#seqArrowSad)" />
+      </svg>
+      <figcaption>
+        One diagram, every branch: the red <code>E01</code>–<code>E11</code>
+        markers show each point in the normal message flow where a failure
+        can occur instead, matched to the error codes below. Whichever one
+        fires, everything from "any failure enters here" down is identical:
+        one catch, a screenshot and page HTML in S3, one coded CloudWatch Logs
+        entry (with the screenshot), one Errors metric increment, one alarm
+        evaluation, and — if configured — one Datadog notification.
+      </figcaption>
+    </figure>
+
+    <h3>What happens on any failure</h3>
+    <ol class="steps">
+      <li>The failing step throws an error with a code (<code>CDR-E01</code>–<code>CDR-E11</code>), the step name, the reason, and — when a browser page is open — the page URL, title and any on-page error message.</li>
+      <li>The catch block saves a full-page screenshot and the page HTML to S3 at <code>debug/&lt;run-id&gt;/99-failure.png</code> and <code>99-failure.html</code>. This always happens; <code>DebugScreenshots</code> only adds the per-step screenshots.</li>
+      <li>It writes a JPEG screenshot to CloudWatch Logs on a line starting <code>FAILURE_SCREENSHOT_BASE64</code>.</li>
+      <li>It writes a <code>CDR_DOWNLOAD_FAILED</code> JSON line to CloudWatch Logs with <code>code</code>, <code>step</code>, <code>reason</code>, <code>runId</code>, <code>durationMs</code> and the two S3 paths.</li>
+      <li>It rethrows. The invocation's <code>errorMessage</code> (what <code>aws lambda invoke</code> writes to <code>out.json</code>) reads <code>[CDR-Exx] &lt;step&gt; failed: &lt;reason&gt; Failure screenshot: s3://…</code>.</li>
+      <li>It publishes <code>CdrDownloader</code> / <code>Failures</code> with the error code as a dimension, shown on the monitoring dashboard.</li>
+      <li>AWS adds 1 to the <code>Errors</code> metric, which trips <code>CdrDownloaderErrorsAlarm</code> and, if configured, Datadog.</li>
+      <li>Lambda retries a failed scheduled run twice, a few minutes apart, so one failed month can log up to three <code>CDR_DOWNLOAD_FAILED</code> lines.</li>
+    </ol>
+    <p class="steps-note"><strong>Exception — timeout:</strong> a run that reaches the 180-second Lambda timeout is stopped before steps 2–5 can run. It logs only <code>Task timed out after 180</code> seconds, with no code and no screenshot, but still counts as an error, so the alarm and retries still happen.</p>
+
+    <h3>How to investigate a failure</h3>
+    <ol class="steps">
+      <li>Read the code and message in <code>out.json</code>, or search CloudWatch Logs for <code>CDR_DOWNLOAD_FAILED</code>.</li>
+      <li>Look up the code below for what it means and what to do.</li>
+      <li>Open the screenshot: download the S3 path from the message, or decode the latest CloudWatch copy with <code>aws logs filter-log-events --log-group-name /aws/lambda/gradwell-cdr-downloader --filter-pattern '"FAILURE_SCREENSHOT_BASE64"' --query 'events[-1].message' --output text | sed 's/.*FAILURE_SCREENSHOT_BASE64 //' | base64 -d &gt; failure.jpg</code></li>
+      <li>If a selector needs changing, use <code>99-failure.html</code> to find the right element.</li>
+      <li>Fix, redeploy if needed, then re-invoke (see Recovery below).</li>
+    </ol>
+
+    <h3>Error codes</h3>
+    <div class="components">
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E01 · Credentials fetch failed</div>
+          <span class="role-tag role-security">Secrets Manager</span>
+        </div>
+        <div class="component-desc">
+          The secret <code>prod/AdminPortal/Gradwell</code> couldn't be read, isn't valid JSON, or is missing <code>username</code>/<code>password</code>. Happens before the browser starts, so there is no screenshot.
+          <span class="err-msg">[CDR-E01] Fetching portal credentials from Secrets Manager failed: &lt;AWS error&gt;. No browser page was open.</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the secret exists in eu-west-2 with both keys, and that the function role can read it.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E02 · Browser failed to start</div>
+          <span class="role-tag role-aws">Lambda runtime</span>
+        </div>
+        <div class="component-desc">
+          Headless Chromium couldn't launch — usually a dependency or memory problem after a <code>@sparticuz/chromium</code> upgrade. No screenshot is possible.
+          <span class="err-msg">[CDR-E02] Launching the headless browser failed: &lt;error&gt;. No browser page was open.</span>
+          <div class="err-fix"><strong>What to do:</strong> Re-check the <code>@sparticuz/chromium</code> / <code>playwright-core</code> versions and the 2048 MB memory setting.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E03 · SSO login failed</div>
+          <span class="role-tag role-external">Gradwell SSO</span>
+        </div>
+        <div class="component-desc">
+          The login form fields or button weren't found, or the login didn't complete — wrong credentials, a changed login page, or an extra step such as MFA.
+          <span class="err-msg">[CDR-E03] Logging in to Gradwell SSO failed: timed out (locator.fill: Timeout 30000ms exceeded, waiting for locator('…')). Page URL: …; page message: "…".</span>
+          <div class="err-fix"><strong>What to do:</strong> Open the failure screenshot. If the password changed, update the secret; if the page changed, update <code>SELECTOR_USERNAME_INPUT</code>, <code>SELECTOR_PASSWORD_INPUT</code> or <code>SELECTOR_LOGIN_BUTTON</code>.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E04 · Admin home page didn't open</div>
+          <span class="role-tag role-external">Gradwell Admin</span>
+        </div>
+        <div class="component-desc">
+          Neither clicking Admin nor going straight to <code>/home</code> worked — often means the login didn't actually succeed.
+          <span class="err-msg">[CDR-E04] Opening the Admin home page failed: &lt;reason&gt;. Page URL: …</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the screenshot for a login error or expired session, then the <code>ADMIN_HOME_URL</code> setting.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E05 · CDR page didn't open</div>
+          <span class="role-tag role-external">Gradwell Admin</span>
+        </div>
+        <div class="component-desc">
+          Navigating to <code>/cdrs</code> itself failed (timeout or network error) before any table check.
+          <span class="err-msg">[CDR-E05] Opening the CDR page failed: &lt;reason&gt;. Page URL: …</span>
+          <div class="err-fix"><strong>What to do:</strong> Re-run; if it repeats, check the portal is up and the <code>CDR_URL</code> setting.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E06 · CDR table missing</div>
+          <span class="role-tag role-external">Gradwell CDR page</span>
+        </div>
+        <div class="component-desc">
+          The CDR page opened but no table rows appeared within 30 s. The page's own message is quoted — on 1 Oct 2026 this was <strong>"customer is required"</strong>, meaning no customer was selected.
+          <span class="err-msg">[CDR-E06] Opening the CDR page failed: the CDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/cdrs; title: "…"; page message: "customer is required".</span>
+          <div class="err-fix"><strong>What to do:</strong> Act on the quoted page message. For "customer is required", the automation must select the customer (or open the customer-specific CDR URL) before the table can load.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E07 · End Date cell not found</div>
+          <span class="role-tag role-security">1st of month only</span>
+        </div>
+        <div class="component-desc">
+          The table loaded but the newest row's End Date cell (<code>SELECTOR_LATEST_END_DATE_CELL</code>) isn't there — the table's columns differ from what's expected.
+          <span class="err-msg">[CDR-E07] Checking the newest CDR period is published failed: could not find the "End Date" cell of the newest CDR row (no element matched "…" within 30s) …</span>
+          <div class="err-fix"><strong>What to do:</strong> Use <code>99-failure.html</code> to find the right column and update <code>SELECTOR_LATEST_END_DATE_CELL</code>.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E08 · End Date unreadable</div>
+          <span class="role-tag role-security">1st of month only</span>
+        </div>
+        <div class="component-desc">
+          The End Date cell was found but its text isn't a date — the column order or date format has changed.
+          <span class="err-msg">[CDR-E08] Checking the newest CDR period is published failed: could not parse the newest CDR period's end date from "…" — the CDR table format may have changed.</span>
+          <div class="err-fix"><strong>What to do:</strong> Compare the quoted text with the table in the screenshot and fix the selector or the date parsing.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E09 · New period not published yet</div>
+          <span class="role-tag role-security">1st of month only</span>
+        </div>
+        <div class="component-desc">
+          The newest row ends before the last day of the previous month — Gradwell hasn't published the new CDR yet. Not a bug in the automation.
+          <span class="err-msg">[CDR-E09] Checking the newest CDR period is published failed: new CDR record not yet available: expected the newest CDR period to end 2026-09-30 …, but the newest row on the page ends 2026-08-31 …</span>
+          <div class="err-fix"><strong>What to do:</strong> Wait for Gradwell to publish, then re-invoke manually. The check only runs on the 1st, so a re-run on a later day downloads the newest row without it.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E10 · Download failed</div>
+          <span class="role-tag role-external">Gradwell CDR page</span>
+        </div>
+        <div class="component-desc">
+          No download started after clicking the newest row's download control, or the download broke partway through.
+          <span class="err-msg">[CDR-E10] Downloading the CDR file failed: timed out (page.waitForEvent: Timeout 60000ms exceeded while waiting for event "download") … — or — … failed: Download failed: &lt;reason&gt;.</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the screenshot for a missing or moved download icon and update <code>SELECTOR_DOWNLOAD_BUTTON</code>; re-run if it was a network blip.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E11 · S3 upload failed</div>
+          <span class="role-tag role-aws">Amazon S3</span>
+        </div>
+        <div class="component-desc">
+          The CDR file downloaded but <code>PutObject</code> to <code>cdr/…</code> failed — permissions or network.
+          <span class="err-msg">[CDR-E11] Uploading the CDR file to S3 failed: &lt;AWS error&gt;.</span>
+          <div class="err-fix"><strong>What to do:</strong> Check the bucket exists and the role's prefix-scoped <code>s3:PutObject</code> permission.</div>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-id">
+          <div class="component-name">CDR-E99 · Unexpected error</div>
+          <span class="role-tag role-aws">Anywhere</span>
+        </div>
+        <div class="component-desc">
+          Something failed outside the named steps (should be rare). The message is the raw error.
+          <span class="err-msg">&lt;raw error message&gt; — logged with "code":"CDR-E99".</span>
+          <div class="err-fix"><strong>What to do:</strong> Read the <code>stack</code> field of the <code>CDR_DOWNLOAD_FAILED</code> log line.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Recovery — restarting after a fix</h2>
+    <figure>
+      <svg viewBox="0 0 1040 400" role="img" aria-label="Once the root cause is resolved — selectors updated and redeployed, or Gradwell has published the missing period — there are two ways forward: wait for MonthlyCdrDownloadSchedule to fire again automatically next month, or manually re-invoke the function now for an immediate result. Either way, a successful run uploads to S3 and logs success. CdrDownloaderErrorsAlarm returns to OK on its own about a day after the failure regardless of whether anyone fixed anything, since the function will not run again until next month either way — so OK is not confirmation of a fix.">
+        <defs>
+          <marker id="recoveryArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
+          </marker>
+        </defs>
+
+        <rect x="340" y="16" width="360" height="60" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="520" y="40" text-anchor="middle" font-family="var(--font-sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Root cause resolved</text>
+        <text x="520" y="58" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">selectors fixed &amp; redeployed, or Gradwell has now published the period</text>
+
+        <path d="M420,76 C 300,95 200,100 180,116" fill="none" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#recoveryArrow)" />
+        <path d="M620,76 C 740,95 840,100 860,116" fill="none" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#recoveryArrow)" />
+
+        <rect x="30" y="120" width="440" height="80" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="250" y="145" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">Option A — do nothing</text>
+        <text x="250" y="164" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">MonthlyCdrDownloadSchedule fires again automatically</text>
+        <text x="250" y="180" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">next 1st of month, 09:00 Europe/London (DST-aware)</text>
+        <text x="250" y="196" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">no manual restart of the trigger needed</text>
+
+        <rect x="570" y="120" width="440" height="80" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="790" y="145" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">Option B — re-invoke now</text>
+        <text x="790" y="164" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">aws lambda invoke --function-name &lt;arn&gt;</text>
+        <text x="790" y="180" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" fill="var(--ink-muted)">--payload file://events/manual-invoke.json …</text>
+        <text x="790" y="196" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">same command used for testing — immediate result</text>
+
+        <path d="M250,200 C 300,225 420,232 480,248" fill="none" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#recoveryArrow)" />
+        <path d="M790,200 C 740,225 620,232 560,248" fill="none" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#recoveryArrow)" />
+
+        <rect x="270" y="252" width="500" height="54" rx="10" fill="var(--aws-soft)" stroke="var(--aws)" stroke-width="1.5" />
+        <text x="520" y="275" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">Successful run</text>
+        <text x="520" y="293" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink-muted)">uploads to S3, logs success + durationMs</text>
+
+        <line x1="520" y1="306" x2="520" y2="326" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#recoveryArrow)" />
+
+        <rect x="170" y="330" width="700" height="64" rx="10" fill="var(--security-soft)" stroke="var(--security)" stroke-width="1.5" />
+        <text x="520" y="352" text-anchor="middle" font-family="var(--font-sans)" font-size="11.5" font-weight="600" fill="var(--security)">CdrDownloaderErrorsAlarm returns to OK — with a caveat</text>
+        <text x="520" y="369" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink)">This also happens on its own ~1 day after a failure either way (notBreaching), since the</text>
+        <text x="520" y="384" text-anchor="middle" font-family="var(--font-sans)" font-size="10" fill="var(--ink)">function won't run again until next month. OK ≠ confirmed fixed — trust the invocation result.</text>
+      </svg>
+      <figcaption>
+        Nothing needs to be manually "restarted" — <code>MonthlyCdrDownloadSchedule</code>
+        keeps firing on schedule regardless of the last run's outcome; there's no
+        disable-on-failure behavior wired into this stack. Once the underlying issue is
+        fixed, either wait for next month's run to pick up the fix automatically, or
+        re-invoke immediately to confirm it now. Either path ends the same way — but the
+        alarm's own return to OK is not proof of a fix by itself, since a quiet function
+        (no invocation = no new error) looks identical to a fixed one from the alarm's
+        point of view.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Operational facts</h2>
+    <div class="facts">
+      <div class="fact"><span class="fact-label">Region</span><span class="fact-value">eu-west-2</span></div>
+      <div class="fact"><span class="fact-label">Stack name</span><span class="fact-value">gradwell-cdr-downloader</span></div>
+      <div class="fact"><span class="fact-label">IaC</span><span class="fact-value">AWS SAM</span></div>
+      <div class="fact"><span class="fact-label">Runtime</span><span class="fact-value">nodejs22.x</span></div>
+      <div class="fact"><span class="fact-label">Memory</span><span class="fact-value">2048 MB</span></div>
+      <div class="fact"><span class="fact-label">Timeout</span><span class="fact-value">180s</span></div>
+      <div class="fact"><span class="fact-label">Schedule</span><span class="fact-value">09:00 Europe/London</span></div>
+      <div class="fact"><span class="fact-label">Log retention</span><span class="fact-value">400 days</span></div>
+      <div class="fact"><span class="fact-label">Delivery check</span><span class="fact-value">10:30 Europe/London</span></div>
+      <div class="fact"><span class="fact-label">Alarms</span><span class="fact-value">Errors · delivery missing · file too small</span></div>
+    </div>
+  </section>
+
+  <div class="gap-note">
+    <span class="mark">!</span>
+    <span>
+      <strong>Datadog alerting is optional and off by default.</strong>
+      Three alarms exist regardless: <code>CdrDownloaderErrorsAlarm</code>
+      on the <code>Errors</code> metric, <code>delivery-missing</code> (no
+      file of at least 1 KB by the 10:30 delivery check on the 1st) and
+      <code>file-too-small</code> (a saved file under 1 KB). The
+      <code>CdrDownloaderDashboard</code> shows them with the five monitoring
+      metrics. Their ALARM/OK state only
+      reaches Datadog once <code>DatadogForwarderTopicArn</code> is set to
+      a real Forwarder SNS topic ARN (<code>sam deploy
+      --parameter-overrides DatadogForwarderTopicArn=&lt;arn&gt;</code>) —
+      until then, check the alarm directly via CloudWatch or
+      <code>aws cloudwatch describe-alarms</code>. Note that a legitimate
+      ALARM on the 1st of the month can now also mean "Gradwell hasn't
+      published this period yet" rather than a real bug — check the
+      CloudWatch Logs message before treating it as an incident: that case
+      is error code <code>CDR-E09</code>. The SNS topic must be in eu-west-2,
+      the same region as the alarm.
+    </span>
+  </div>
+
+  <div class="gap-note">
+    <span class="mark">!</span>
+    <span>
+      <strong>Current status (2 Oct 2026): every live run fails with
+      <code>CDR-E06</code>.</strong> The page shows "customer is required"
+      instead of the CDR table, so the automation has to select a customer
+      (or open a customer-specific address) before the table can load. The
+      page setting is now <code>CDR_URL</code>
+      (<code>https://admin.prod.gradwell.com/cdrs</code>); confirm the next
+      run after deploying.
+    </span>
+  </div>
+
+</main>
