@@ -6,7 +6,8 @@ const { chromium: playwright } = require("playwright-core");
 
 const { config, requireEnv } = require("./config");
 const { getCredentials } = require("./secrets");
-const { uploadBuffer } = require("./s3");
+const { uploadBuffer, listObjects } = require("./s3");
+const { putMetric } = require("./metrics");
 
 /**
  * Stable error codes for every way a run can fail. The code leads the
@@ -361,9 +362,35 @@ async function captureFailure(page, bucket, runId) {
   return result;
 }
 
-exports.handler = async () => {
+/**
+ * Monthly delivery check (MonthlyCdrDeliveryCheckSchedule, 10:30 UK time on
+ * the 1st): publishes DeliveryCheck = 1 if this month's cdr/<yyyy>/<mm>/
+ * prefix holds a file of at least minCdrFileBytes, otherwise 0. That catches
+ * the cases the Errors alarm can't see: a run that never started, and a
+ * "successful" run that saved a header-only file. Uses the same UTC
+ * year/month as buildS3Key().
+ */
+async function deliveryCheck(bucket) {
+  const now = new Date();
+  const prefix = `cdr/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/`;
+  const files = await listObjects(bucket, prefix);
+  const largest = files.reduce((max, f) => Math.max(max, f.size), 0);
+  const ok = largest >= config.minCdrFileBytes;
+  await putMetric("DeliveryCheck", ok ? 1 : 0, "Count");
+  console.log(
+    `CDR_DELIVERY_CHECK ${JSON.stringify({ prefix, files: files.length, largestBytes: largest, minBytes: config.minCdrFileBytes, ok })}`
+  );
+  return { statusCode: 200, mode: "deliveryCheck", prefix, files: files.length, largestBytes: largest, ok };
+}
+
+exports.handler = async (event = {}) => {
   const startedAt = Date.now();
   const bucket = requireEnv("CDR_BUCKET_NAME");
+
+  if (event && event.mode === "deliveryCheck") {
+    return deliveryCheck(bucket);
+  }
+
   const runId = crypto.randomUUID();
 
   let browser;
@@ -408,10 +435,13 @@ exports.handler = async () => {
     const key = buildS3Key(filename);
     await runStep(page, ERRORS.S3_UPLOAD, () => uploadBuffer(bucket, key, buffer));
 
+    await putMetric("FileSizeBytes", buffer.length, "Bytes");
+
     const durationMs = Date.now() - startedAt;
-    console.log(`CDR file uploaded to s3://${bucket}/${key} in ${durationMs}ms`);
-    return { statusCode: 200, bucket, key, durationMs };
+    console.log(`CDR file uploaded to s3://${bucket}/${key} (${buffer.length} bytes) in ${durationMs}ms`);
+    return { statusCode: 200, bucket, key, sizeBytes: buffer.length, durationMs };
   } catch (err) {
+    await putMetric("Failures", 1, "Count", [{ Name: "Code", Value: err.code || "CDR-E99" }]);
     const failure = await captureFailure(page, bucket, runId);
     const durationMs = Date.now() - startedAt;
     console.error(
