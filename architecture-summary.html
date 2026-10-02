@@ -835,6 +835,7 @@
       <li>It writes a JPEG screenshot to CloudWatch Logs on a line starting <code>FAILURE_SCREENSHOT_BASE64</code>.</li>
       <li>It writes a <code>CDR_DOWNLOAD_FAILED</code> JSON line to CloudWatch Logs with <code>code</code>, <code>step</code>, <code>reason</code>, <code>runId</code>, <code>durationMs</code> and the two S3 paths.</li>
       <li>It rethrows. The invocation's <code>errorMessage</code> (what <code>aws lambda invoke</code> writes to <code>out.json</code>) reads <code>[CDR-Exx] &lt;step&gt; failed: &lt;reason&gt; Failure screenshot: s3://…</code>.</li>
+      <li>It publishes <code>CdrDownloader</code> / <code>Failures</code> with the error code as a dimension, shown on the monitoring dashboard.</li>
       <li>AWS adds 1 to the <code>Errors</code> metric, which trips <code>CdrDownloaderErrorsAlarm</code> and, if configured, Datadog.</li>
       <li>Lambda retries a failed scheduled run twice, a few minutes apart, so one failed month can log up to three <code>CDR_DOWNLOAD_FAILED</code> lines.</li>
     </ol>
@@ -1053,6 +1054,8 @@
       <div class="fact"><span class="fact-label">Timeout</span><span class="fact-value">180s</span></div>
       <div class="fact"><span class="fact-label">Schedule</span><span class="fact-value">09:00 Europe/London</span></div>
       <div class="fact"><span class="fact-label">Log retention</span><span class="fact-value">400 days</span></div>
+      <div class="fact"><span class="fact-label">Delivery check</span><span class="fact-value">10:30 Europe/London</span></div>
+      <div class="fact"><span class="fact-label">Alarms</span><span class="fact-value">Errors · delivery missing · file too small</span></div>
     </div>
   </section>
 
@@ -1060,8 +1063,12 @@
     <span class="mark">!</span>
     <span>
       <strong>Datadog alerting is optional and off by default.</strong>
-      <code>CdrDownloaderErrorsAlarm</code> watches the function's
-      <code>Errors</code> metric regardless, but its ALARM/OK state only
+      Three alarms exist regardless: <code>CdrDownloaderErrorsAlarm</code>
+      on the <code>Errors</code> metric, <code>delivery-missing</code> (no
+      file of at least 1 KB by the 10:30 delivery check on the 1st) and
+      <code>file-too-small</code> (a saved file under 1 KB). The
+      <code>CdrDownloaderDashboard</code> shows them with the five monitoring
+      metrics. Their ALARM/OK state only
       reaches Datadog once <code>DatadogForwarderTopicArn</code> is set to
       a real Forwarder SNS topic ARN (<code>sam deploy
       --parameter-overrides DatadogForwarderTopicArn=&lt;arn&gt;</code>) —

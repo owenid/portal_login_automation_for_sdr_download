@@ -193,12 +193,12 @@ On success, `out.json` includes `durationMs` — wall-clock time for the whole
 run (login through S3 upload), e.g.:
 
 ```json
-{"statusCode":200,"bucket":"...","key":"cdr/2026/09/...","durationMs":18342}
+{"statusCode":200,"bucket":"...","key":"cdr/2026/09/...","sizeBytes":48213,"durationMs":18342}
 ```
 
 The same duration is also logged to CloudWatch on both success
-(`CDR file uploaded to s3://... in <ms>ms`) and failure
-(`CDR download automation failed after <ms>ms: ...`) — useful for spotting
+(`CDR file uploaded to s3://... (<n> bytes) in <ms>ms`) and failure (the
+`durationMs` field of the `CDR_DOWNLOAD_FAILED` log line) — useful for spotting
 runs that are creeping toward the function's 180s timeout.
 
 Check CloudWatch Logs for the function, and the S3 bucket's `cdr/` (and, if
@@ -253,6 +253,26 @@ setup.
   ```bash
   aws cloudwatch describe-alarms --alarm-names <stack-name>-lambda-errors
   ```
+- **Monitoring dashboard and alarms**: the `CdrDownloaderDashboard`
+  (CloudWatch → Dashboards → `<stack name>`) shows five metrics over 400
+  days at a 1-day period: Lambda `Invocations`, `Errors` and `Duration`
+  (max), plus two custom metrics the function publishes to the
+  `CdrDownloader` namespace — `Failures` (one series per `Code`, e.g.
+  `CDR-E06`) and `FileSizeBytes`. Two more alarms cover what the Errors
+  alarm can't see, and notify the same Datadog route:
+  - `<stack name>-delivery-missing`: `MonthlyCdrDeliveryCheckSchedule`
+    runs the function at 10:30 local time on the 1st with
+    `{"mode":"deliveryCheck"}`. It lists `cdr/<yyyy>/<mm>/` and publishes
+    `DeliveryCheck` = 1 if a file of at least `MinCdrFileBytes` (default
+    1024) is there, otherwise 0. Fires when no usable file arrived: the
+    run never started, every attempt failed, or the file was headers
+    only.
+  - `<stack name>-file-too-small`: fires when a run saves a file smaller
+    than `MinCdrFileBytes`, including manual re-runs after the 1st.
+
+  Publishing a metric never fails a run: a CloudWatch error is logged as
+  `Failed to publish metric …` and ignored. Run the delivery check by hand
+  with `--payload '{"mode":"deliveryCheck"}'`.
 - **Secrets**: credentials are only ever read at runtime from Secrets
   Manager via the function's IAM role; they are never stored in code,
   environment variables, or the S3 bucket.
@@ -260,7 +280,10 @@ setup.
   bucket-wide — `s3:PutObject` only on `cdr/*` and `debug/*` within
   `CdrBucket` (the only two prefixes the code ever writes to), plus
   `secretsmanager:GetSecretValue` scoped to the one named secret's ARN
-  pattern. No broader S3 or Secrets Manager access is granted.
+  pattern. For monitoring it can also call `cloudwatch:PutMetricData`, only
+  in the `CdrDownloader` namespace, and `s3:ListBucket`, only for the `cdr/`
+  prefix (used by the delivery check). No broader S3, Secrets Manager or
+  CloudWatch access is granted.
 - **Chromium/Playwright versions**: `@sparticuz/chromium` and
   `playwright-core` versions are pinned in `package.json`. If you bump
   `@sparticuz/chromium`, re-check its
