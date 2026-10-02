@@ -338,7 +338,7 @@
   <section>
     <h2>System diagram</h2>
     <figure>
-      <svg viewBox="0 0 1040 620" role="img" aria-label="AWS EventBridge Scheduler triggers an AWS Lambda function monthly at a fixed UK local time, DST-aware. The Lambda reads credentials from Secrets Manager, drives a headless browser through the external Gradwell SSO, Admin and SDR pages, and on the 1st of the month verifies the newest SDR period has actually been published before downloading it — throwing an error to CloudWatch instead if it hasn't. On success it writes the file to an S3 bucket, with every step's logs landing in CloudWatch — all inside a narrowly scoped IAM role.">
+      <svg viewBox="0 0 1040 620" role="img" aria-label="AWS EventBridge Scheduler triggers an AWS Lambda function monthly at a fixed UK local time, DST-aware. The Lambda reads credentials from Secrets Manager, drives a headless browser through the external Gradwell SSO, Admin and CDR pages, and on the 1st of the month verifies the newest CDR period has actually been published before downloading it — throwing an error to CloudWatch instead if it hasn't. On success it writes the file to an S3 bucket, with every step's logs landing in CloudWatch — all inside a narrowly scoped IAM role.">
 
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -586,7 +586,7 @@
   <section>
     <h2>Sequence flow — happy path</h2>
     <figure>
-      <svg viewBox="0 0 1040 720" role="img" aria-label="Sequence diagram of a successful run: EventBridge Scheduler invokes the Lambda, which fetches credentials from Secrets Manager, logs into Gradwell, navigates to the SDR list, confirms the newest period has been published on the 1st of the month, downloads the CDR file, uploads it to S3, logs success with the run's duration, and returns.">
+      <svg viewBox="0 0 1040 720" role="img" aria-label="Sequence diagram of a successful run: EventBridge Scheduler invokes the Lambda, which fetches credentials from Secrets Manager, logs into Gradwell, navigates to the CDR list, confirms the newest period has been published on the 1st of the month, downloads the CDR file, uploads it to S3, logs success with the run's duration, and returns.">
         <defs>
           <marker id="seqArrowHappy" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
@@ -642,7 +642,7 @@
           <text x="441" y="270">authenticated session</text>
 
           <line x1="255" y1="320" x2="628" y2="320" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
-          <text x="441" y="312">Admin → SDR navigation</text>
+          <text x="441" y="312">Admin → CDR navigation</text>
 
           <line x1="255" y1="362" x2="628" y2="362" stroke="currentColor" stroke-width="1.4" marker-end="url(#seqArrowHappy)" />
           <text x="441" y="354">read newest row (1st-of-month check)</text>
@@ -681,7 +681,7 @@
   <section>
     <h2>Sequence flow — unhappy path</h2>
     <figure>
-      <svg viewBox="0 0 1040 1040" role="img" aria-label="Sequence diagram showing every unhappy-path branch on the same message flow as the happy path. Error-code markers show where each failure can occur: CDR-E01 secret fetch, CDR-E02 browser launch, CDR-E03 SSO login, CDR-E04 to E06 Admin and SDR navigation including the SDR table not appearing, CDR-E07 to E09 the 1st-of-month freshness check, CDR-E10 download, and CDR-E11 S3 upload. Whichever one throws, execution converges on the same shared outcome: the Lambda's catch block always saves a failure screenshot and the page HTML to S3, logs the screenshot and a CDR_DOWNLOAD_FAILED JSON line with the code, step and reason to CloudWatch Logs, and rethrows with an errorMessage that starts with the code. AWS separately records an Errors metric increment; after a one-day evaluation period this trips the CloudWatch alarm, which — if a Datadog Forwarder topic ARN is configured — reaches Datadog as a monitor event, otherwise it is visible only via CloudWatch.">
+      <svg viewBox="0 0 1040 1040" role="img" aria-label="Sequence diagram showing every unhappy-path branch on the same message flow as the happy path. Error-code markers show where each failure can occur: CDR-E01 secret fetch, CDR-E02 browser launch, CDR-E03 SSO login, CDR-E04 to E06 Admin and CDR navigation including the CDR table not appearing, CDR-E07 to E09 the 1st-of-month freshness check, CDR-E10 download, and CDR-E11 S3 upload. Whichever one throws, execution converges on the same shared outcome: the Lambda's catch block always saves a failure screenshot and the page HTML to S3, logs the screenshot and a CDR_DOWNLOAD_FAILED JSON line with the code, step and reason to CloudWatch Logs, and rethrows with an errorMessage that starts with the code. AWS separately records an Errors metric increment; after a one-day evaluation period this trips the CloudWatch alarm, which — if a Datadog Forwarder topic ARN is configured — reaches Datadog as a monitor event, otherwise it is visible only via CloudWatch.">
         <defs>
           <marker id="seqArrowSad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor" />
@@ -744,7 +744,7 @@
           <text x="441" y="270">authenticated session</text>
 
           <line x1="255" y1="320" x2="628" y2="320" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
-          <text x="441" y="312">Admin → SDR navigation</text>
+          <text x="441" y="312">Admin → CDR navigation</text>
           <text x="643" y="324" fill="var(--security)" font-weight="700" font-size="11" text-anchor="start">E04–E06</text>
 
           <line x1="255" y1="362" x2="628" y2="362" stroke="var(--aws)" stroke-width="1.4" marker-end="url(#seqArrowSad)" />
@@ -897,24 +897,24 @@
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">CDR-E05 · SDR page didn't open</div>
+          <div class="component-name">CDR-E05 · CDR page didn't open</div>
           <span class="role-tag role-external">Gradwell Admin</span>
         </div>
         <div class="component-desc">
           Navigating to <code>/cdrs</code> itself failed (timeout or network error) before any table check.
-          <span class="err-msg">[CDR-E05] Opening the SDR page failed: &lt;reason&gt;. Page URL: …</span>
+          <span class="err-msg">[CDR-E05] Opening the CDR page failed: &lt;reason&gt;. Page URL: …</span>
           <div class="err-fix"><strong>What to do:</strong> Re-run; if it repeats, check the portal is up and the <code>CDR_URL</code> setting.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
-          <div class="component-name">CDR-E06 · SDR table missing</div>
-          <span class="role-tag role-external">Gradwell SDR page</span>
+          <div class="component-name">CDR-E06 · CDR table missing</div>
+          <span class="role-tag role-external">Gradwell CDR page</span>
         </div>
         <div class="component-desc">
-          The SDR page opened but no table rows appeared within 30 s. The page's own message is quoted — on 1 Oct 2026 this was <strong>"customer is required"</strong>, meaning no customer was selected.
-          <span class="err-msg">[CDR-E06] Opening the SDR page failed: the SDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/sdrs; title: "Gradwell - Admin - SDRs"; page message: "customer is required".</span>
-          <div class="err-fix"><strong>What to do:</strong> Act on the quoted page message. For "customer is required", the automation must select the customer (or open the customer-specific SDR URL) before the table can load.</div>
+          The CDR page opened but no table rows appeared within 30 s. The page's own message is quoted — on 1 Oct 2026 this was <strong>"customer is required"</strong>, meaning no customer was selected.
+          <span class="err-msg">[CDR-E06] Opening the CDR page failed: the CDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/cdrs; title: "…"; page message: "customer is required".</span>
+          <div class="err-fix"><strong>What to do:</strong> Act on the quoted page message. For "customer is required", the automation must select the customer (or open the customer-specific CDR URL) before the table can load.</div>
         </div>
       </div>
       <div class="component">
@@ -924,7 +924,7 @@
         </div>
         <div class="component-desc">
           The table loaded but the newest row's End Date cell (<code>SELECTOR_LATEST_END_DATE_CELL</code>) isn't there — the table's columns differ from what's expected.
-          <span class="err-msg">[CDR-E07] Checking the newest SDR period is published failed: could not find the "End Date" cell of the newest SDR row (no element matched "…" within 30s) …</span>
+          <span class="err-msg">[CDR-E07] Checking the newest CDR period is published failed: could not find the "End Date" cell of the newest CDR row (no element matched "…" within 30s) …</span>
           <div class="err-fix"><strong>What to do:</strong> Use <code>99-failure.html</code> to find the right column and update <code>SELECTOR_LATEST_END_DATE_CELL</code>.</div>
         </div>
       </div>
@@ -935,7 +935,7 @@
         </div>
         <div class="component-desc">
           The End Date cell was found but its text isn't a date — the column order or date format has changed.
-          <span class="err-msg">[CDR-E08] Checking the newest SDR period is published failed: could not parse the newest SDR period's end date from "…" — the SDR table format may have changed.</span>
+          <span class="err-msg">[CDR-E08] Checking the newest CDR period is published failed: could not parse the newest CDR period's end date from "…" — the CDR table format may have changed.</span>
           <div class="err-fix"><strong>What to do:</strong> Compare the quoted text with the table in the screenshot and fix the selector or the date parsing.</div>
         </div>
       </div>
@@ -946,14 +946,14 @@
         </div>
         <div class="component-desc">
           The newest row ends before the last day of the previous month — Gradwell hasn't published the new CDR yet. Not a bug in the automation.
-          <span class="err-msg">[CDR-E09] Checking the newest SDR period is published failed: new CDR record not yet available: expected the newest SDR period to end 2026-09-30 …, but the newest row on the page ends 2026-08-31 …</span>
+          <span class="err-msg">[CDR-E09] Checking the newest CDR period is published failed: new CDR record not yet available: expected the newest CDR period to end 2026-09-30 …, but the newest row on the page ends 2026-08-31 …</span>
           <div class="err-fix"><strong>What to do:</strong> Wait for Gradwell to publish, then re-invoke manually. The check only runs on the 1st, so a re-run on a later day downloads the newest row without it.</div>
         </div>
       </div>
       <div class="component">
         <div class="component-id">
           <div class="component-name">CDR-E10 · Download failed</div>
-          <span class="role-tag role-external">Gradwell SDR page</span>
+          <span class="role-tag role-external">Gradwell CDR page</span>
         </div>
         <div class="component-desc">
           No download started after clicking the newest row's download control, or the download broke partway through.

@@ -11,7 +11,7 @@ Gradwell portal, and downloads the SDR CDR file into S3.
    `https://admin.prod.gradwell.com/home`.
 3. **CDR section** — opens `https://admin.prod.gradwell.com/cdrs` (the
    `CDR_URL` setting).
-4. **Download** — clicks the download link/button on the SDR page, and
+4. **Download** — clicks the download link/button on the CDR page, and
    uploads the resulting file to S3 at `cdr/<yyyy>/<mm>/<yyyy-mm-dd>-<filename>`.
 
 The browser automation is done with [Playwright](https://playwright.dev/)
@@ -21,7 +21,7 @@ built to run inside the Lambda execution environment.
 
 ## ⚠️ Selectors have not been verified against the live site
 
-I don't have access to the real Gradwell SSO/Admin/SDR pages, so the CSS/text
+I don't have access to the real Gradwell SSO/Admin/CDR pages, so the CSS/text
 selectors used to find the username field, password field, login button,
 "Admin" link, "SDR" link, and download button in `src/config.js` are
 best-effort defaults, not verified. **You will very likely need to tune
@@ -34,15 +34,15 @@ change or redeploy needed:
 |------------------------------|---------------------------------------|-----------------------------------------------------------|
 | `SSO_URL`                   | SSO login page                        | `https://sso.prod.gradwell.com`                           |
 | `ADMIN_HOME_URL`             | Expected URL after choosing Admin     | `https://admin.prod.gradwell.com/home`                    |
-| `CDR_URL`                    | Page with the CDR/SDR table to download from | `https://admin.prod.gradwell.com/cdrs`              |
+| `CDR_URL`                    | Page with the CDR table to download from | `https://admin.prod.gradwell.com/cdrs`              |
 | `SELECTOR_USERNAME_INPUT`   | Username field on the SSO page        | `input[name="username"], input[type="email"], #username` |
 | `SELECTOR_PASSWORD_INPUT`   | Password field on the SSO page        | `input[name="password"], input[type="password"], #password` |
 | `SELECTOR_LOGIN_BUTTON`     | Submit button on the SSO page         | `button[type="submit"], input[type="submit"]`             |
 | `SELECTOR_ADMIN_OPTION`     | Link/button that opens Admin          | `a:has-text("Admin")`                                      |
 | `SELECTOR_SDR_OPTION`       | Link/button that opens SDR            | `a:has-text("SDR")`                                        |
 | `SELECTOR_DOWNLOAD_BUTTON`  | Icon/link/button that starts the download for the latest (first-row) period | `table tbody tr:first-child td:last-child a, table tbody tr:first-child td:last-child button, table tbody tr:first-child a, table tbody tr:first-child button` |
-| `SELECTOR_LATEST_END_DATE_CELL` | "End Date" cell of the newest (first) SDR row, used only for the 1st-of-month freshness check below | `table tbody tr:first-child td:nth-child(2)` |
-| `SELECTOR_SDR_TABLE_ROW`    | Any row of the SDR table; if none appears after opening the SDR page, the run fails immediately with whatever the page is showing instead | `table tbody tr` |
+| `SELECTOR_LATEST_END_DATE_CELL` | "End Date" cell of the newest (first) CDR row, used only for the 1st-of-month freshness check below | `table tbody tr:first-child td:nth-child(2)` |
+| `SELECTOR_SDR_TABLE_ROW`    | Any row of the CDR table; if none appears after opening the CDR page, the run fails immediately with whatever the page is showing instead | `table tbody tr` |
 | `SELECTOR_PAGE_ERROR_MESSAGE` | Elements whose visible text is quoted in failure messages as the on-page error (e.g. "customer is required") | `[role="alert"], .alert, .error, .error-message, .text-danger, .invalid-feedback, [class*="error" i]` |
 | `NAVIGATION_TIMEOUT_MS`     | Timeout for each navigation step       | `30000`                                                    |
 | `DOWNLOAD_TIMEOUT_MS`       | Timeout waiting for the download to start | `60000`                                               |
@@ -72,7 +72,7 @@ username + password + submit form.
 ### 1st-of-month "record not yet available" check
 
 On the 1st of the month (UTC), `verifyLatestRecordIsAvailable` in
-`src/index.js` reads the newest SDR row's "End Date" and confirms it equals
+`src/index.js` reads the newest CDR row's "End Date" and confirms it equals
 the last calendar day of the previous month — i.e. the period that should
 have just completed. If Gradwell hasn't published that period yet (the
 newest row is still last month's), the function throws instead of silently
@@ -88,7 +88,7 @@ Every failure — whatever `DEBUG_SCREENSHOTS` is set to — produces:
 
 - **A descriptive error message** naming the step that failed, why, and
   what the page was showing, e.g.
-  `[CDR-E06] Opening the SDR page failed: the SDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/sdrs; title: "..."; page message: "customer is required". Failure screenshot: s3://<bucket>/debug/<run-id>/99-failure.png`
+  `[CDR-E06] Opening the CDR page failed: the CDR table did not appear within 30s (no element matched "table tbody tr"). Page URL: https://admin.prod.gradwell.com/cdrs; title: "..."; page message: "customer is required". Failure screenshot: s3://<bucket>/debug/<run-id>/99-failure.png`
   instead of a bare Playwright `Timeout 30000ms exceeded`. This is the
   Lambda's `errorMessage` (what `aws lambda invoke` writes to `out.json`).
   Every failure starts with an error code (`CDR-E01`–`CDR-E11`, or
