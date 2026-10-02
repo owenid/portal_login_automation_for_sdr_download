@@ -9,8 +9,8 @@ Gradwell portal, and downloads the SDR CDR file into S3.
    username/password fields, and submits the login form.
 2. **Admin section** — clicks the "Admin" option, landing on
    `https://admin.prod.gradwell.com/home`.
-3. **SDR section** — clicks the "SDR" option, landing on
-   `https://admin.prod.gradwell.com/sdrs`.
+3. **CDR section** — opens `https://admin.prod.gradwell.com/cdrs` (the
+   `CDR_URL` setting).
 4. **Download** — clicks the download link/button on the SDR page, and
    uploads the resulting file to S3 at `cdr/<yyyy>/<mm>/<yyyy-mm-dd>-<filename>`.
 
@@ -34,7 +34,7 @@ change or redeploy needed:
 |------------------------------|---------------------------------------|-----------------------------------------------------------|
 | `SSO_URL`                   | SSO login page                        | `https://sso.prod.gradwell.com`                           |
 | `ADMIN_HOME_URL`             | Expected URL after choosing Admin     | `https://admin.prod.gradwell.com/home`                    |
-| `SDR_URL`                    | Expected URL after choosing SDR       | `https://admin.prod.gradwell.com/sdrs`                    |
+| `CDR_URL`                    | Page with the CDR/SDR table to download from | `https://admin.prod.gradwell.com/cdrs`              |
 | `SELECTOR_USERNAME_INPUT`   | Username field on the SSO page        | `input[name="username"], input[type="email"], #username` |
 | `SELECTOR_PASSWORD_INPUT`   | Password field on the SSO page        | `input[name="password"], input[type="password"], #password` |
 | `SELECTOR_LOGIN_BUTTON`     | Submit button on the SSO page         | `button[type="submit"], input[type="submit"]`             |
@@ -104,7 +104,7 @@ Every failure — whatever `DEBUG_SCREENSHOTS` is set to — produces:
 
   ```bash
   aws logs filter-log-events \
-    --log-group-name /aws/lambda/<function name> \
+    --log-group-name /aws/lambda/gradwell-cdr-downloader \
     --filter-pattern '"FAILURE_SCREENSHOT_BASE64"' \
     --query 'events[-1].message' --output text \
     | sed 's/.*FAILURE_SCREENSHOT_BASE64 //' | base64 -d > failure.jpg
@@ -211,6 +211,17 @@ setup.
 
 ## Operational notes
 
+- **Logs**: the function writes to its own log group,
+  `/aws/lambda/<stack name>` (`/aws/lambda/gradwell-cdr-downloader` for
+  the default stack), which the stack creates and keeps for
+  `LogRetentionInDays` days (default 400, just over a year of monthly
+  runs). The `CdrDownloaderLogGroupName` stack output gives the exact
+  name. Override the period with
+  `sam deploy --parameter-overrides LogRetentionInDays=<days>` (any value
+  CloudWatch Logs accepts, e.g. 90, 365, 731). The log group is retained
+  if the stack is deleted. Runs before this log group was added (up to
+  1 Oct 2026) are in Lambda's default group,
+  `/aws/lambda/<function name>`, which the stack doesn't manage.
 - **Schedule**: AWS EventBridge Scheduler (`MonthlyCdrDownloadSchedule`),
   not a classic EventBridge Rule — `cron(0 9 1 * ? *)` evaluated in the
   `ScheduleTimezone` parameter (default `Europe/London`), which fires at

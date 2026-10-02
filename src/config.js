@@ -16,7 +16,7 @@ function requireEnv(name) {
 const config = {
   ssoUrl: env("SSO_URL", "https://sso.prod.gradwell.com"),
   adminHomeUrl: env("ADMIN_HOME_URL", "https://admin.prod.gradwell.com/home"),
-  sdrUrl: env("SDR_URL", "https://admin.prod.gradwell.com/sdrs"),
+  cdrUrl: env("CDR_URL", "https://admin.prod.gradwell.com/cdrs"),
 
   // CSS/text selectors for each step of the journey. These are best-effort
   // defaults based on common portal patterns and have NOT been verified

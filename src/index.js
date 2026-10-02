@@ -170,17 +170,17 @@ async function goToAdminHome(page) {
  * land on the expected URL.
  */
 async function goToSdrSection(page) {
-  await page.goto(config.sdrUrl, {
+  await page.goto(config.cdrUrl, {
     waitUntil: "domcontentloaded",
     timeout: config.navigationTimeoutMs,
   });
 
-  if (!page.url().startsWith(config.sdrUrl)) {
+  if (!page.url().startsWith(config.cdrUrl)) {
     try {
       await page.locator(config.selectors.sdrOption).first().click({ timeout: config.navigationTimeoutMs });
       await page.waitForLoadState("domcontentloaded", { timeout: config.navigationTimeoutMs }).catch(() => {});
     } catch (err) {
-      console.warn(`Could not click SDR option (${err.message}); direct navigation also didn't land on ${config.sdrUrl}`);
+      console.warn(`Could not click SDR option (${err.message}); direct navigation also didn't land on ${config.cdrUrl}`);
     }
   }
 
