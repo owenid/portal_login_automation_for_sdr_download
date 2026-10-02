@@ -69,6 +69,15 @@ Parameters:
       days) keeps every monthly run for just over a year, so a failure can
       be compared with the same month last year.
 
+  MinCdrFileBytes:
+    Type: Number
+    Default: 1024
+    MinValue: 1
+    Description: >
+      A CDR file smaller than this many bytes is treated as headers only.
+      Used by the monthly delivery check and by the file-too-small alarm.
+      The header-only file seen on 13 Sep 2026 was 237 bytes.
+
 Conditions:
   HasDatadogForwarderTopicArn: !Not [!Equals [!Ref DatadogForwarderTopicArn, ""]]
 
@@ -131,6 +140,7 @@ Resources:
           ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
           CDR_URL: "https://admin.prod.gradwell.com/cdrs"
           DEBUG_SCREENSHOTS: !Ref DebugScreenshots
+          MIN_CDR_FILE_BYTES: !Ref MinCdrFileBytes
       Policies:
         - Statement:
             # Prefix-scoped rather than SAM's S3WritePolicy (which grants
@@ -149,6 +159,21 @@ Resources:
               # ARN of every secret, so the trailing "*" is required to
               # match the real ARN of the pre-existing secret named above.
               Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${CredentialsSecretName}*"
+            # Custom monitoring metrics. PutMetricData has no resource-level
+            # permissions, so it is limited to the one namespace instead.
+            - Effect: Allow
+              Action: cloudwatch:PutMetricData
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  cloudwatch:namespace: CdrDownloader
+            # The monthly delivery check lists this month's cdr/ prefix.
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt CdrBucket.Arn
+              Condition:
+                StringLike:
+                  s3:prefix: "cdr/*"
 
   SchedulerInvokeRole:
     Type: AWS::IAM::Role
@@ -209,6 +234,140 @@ Resources:
       AlarmActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
       OKActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
 
+  # Runs the same function in "deliveryCheck" mode 90 minutes after the
+  # monthly download, to confirm a usable file actually arrived. Catches a
+  # run that never started and a header-only file, which the Errors alarm
+  # can't see.
+  MonthlyCdrDeliveryCheckSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${AWS::StackName}-monthly-delivery-check"
+      Description: >
+        Checks at 10:30 local time (see ScheduleTimezone) on the 1st that
+        this month's CDR file is in S3 and at least MinCdrFileBytes.
+      ScheduleExpression: "cron(30 10 1 * ? *)"
+      ScheduleExpressionTimezone: !Ref ScheduleTimezone
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      State: ENABLED
+      Target:
+        Arn: !GetAtt CdrDownloaderFunction.Arn
+        RoleArn: !GetAtt SchedulerInvokeRole.Arn
+        Input: '{"mode":"deliveryCheck"}'
+
+  CdrDeliveryMissingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-delivery-missing"
+      AlarmDescription: >
+        No CDR file of at least MinCdrFileBytes in S3 by the 10:30 delivery
+        check on the 1st: the run never started, every attempt failed, or
+        the file was headers only.
+      Namespace: CdrDownloader
+      MetricName: DeliveryCheck
+      Statistic: Minimum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
+      OKActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
+
+  CdrFileTooSmallAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-file-too-small"
+      AlarmDescription: >
+        A run saved a CDR file smaller than MinCdrFileBytes (likely headers
+        only). Also fires for manual re-runs after the 1st.
+      Namespace: CdrDownloader
+      MetricName: FileSizeBytes
+      Statistic: Minimum
+      Period: 86400
+      EvaluationPeriods: 1
+      Threshold: !Ref MinCdrFileBytes
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
+      OKActions: !If [HasDatadogForwarderTopicArn, [!Ref DatadogForwarderTopicArn], []]
+
+  # The five monitoring metrics plus alarm status, over 400 days at a 1-day
+  # period so each monthly run is one point.
+  CdrDownloaderDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}"
+      DashboardBody: !Sub |
+        {
+          "start": "-P400D",
+          "periodOverride": "inherit",
+          "widgets": [
+            {
+              "type": "metric", "x": 0, "y": 0, "width": 8, "height": 6,
+              "properties": {
+                "title": "1 · Invocations (did the schedule fire?)",
+                "region": "${AWS::Region}", "view": "bar", "stat": "Sum", "period": 86400,
+                "metrics": [["AWS/Lambda", "Invocations", "FunctionName", "${CdrDownloaderFunction}"]]
+              }
+            },
+            {
+              "type": "metric", "x": 8, "y": 0, "width": 8, "height": 6,
+              "properties": {
+                "title": "2 · Errors (did the run fail?)",
+                "region": "${AWS::Region}", "view": "bar", "stat": "Sum", "period": 86400,
+                "metrics": [["AWS/Lambda", "Errors", "FunctionName", "${CdrDownloaderFunction}"]]
+              }
+            },
+            {
+              "type": "metric", "x": 16, "y": 0, "width": 8, "height": 6,
+              "properties": {
+                "title": "4 · Duration, max ms (timeout is 180,000)",
+                "region": "${AWS::Region}", "view": "timeSeries", "stat": "Maximum", "period": 86400,
+                "metrics": [["AWS/Lambda", "Duration", "FunctionName", "${CdrDownloaderFunction}"]],
+                "annotations": { "horizontal": [
+                  { "label": "Investigate", "value": 120000 },
+                  { "label": "Timeout", "value": 180000 }
+                ] }
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 6, "width": 16, "height": 6,
+              "properties": {
+                "title": "3 · Failures by error code",
+                "region": "${AWS::Region}", "view": "bar", "stacked": true, "period": 86400,
+                "metrics": [[{ "expression": "SEARCH('{CdrDownloader,Code} MetricName=\"Failures\"', 'Sum', 86400)", "id": "e1" }]]
+              }
+            },
+            {
+              "type": "metric", "x": 16, "y": 6, "width": 8, "height": 6,
+              "properties": {
+                "title": "5 · CDR file size, bytes",
+                "region": "${AWS::Region}", "view": "timeSeries", "stat": "Minimum", "period": 86400,
+                "metrics": [["CdrDownloader", "FileSizeBytes"]],
+                "annotations": { "horizontal": [{ "label": "Headers only below", "value": ${MinCdrFileBytes} }] }
+              }
+            },
+            {
+              "type": "alarm", "x": 0, "y": 12, "width": 16, "height": 3,
+              "properties": {
+                "title": "Alarm status",
+                "alarms": [
+                  "${CdrDownloaderErrorsAlarm.Arn}",
+                  "${CdrDeliveryMissingAlarm.Arn}",
+                  "${CdrFileTooSmallAlarm.Arn}"
+                ]
+              }
+            },
+            {
+              "type": "text", "x": 16, "y": 12, "width": 8, "height": 3,
+              "properties": {
+                "markdown": "**Gradwell CDR download.** Runs 09:00 UK on the 1st; delivery check 10:30. Error codes: see CDR-Downloader-Error-Codes.docx in the repository."
+              }
+            }
+          ]
+        }
+
 Outputs:
   CdrBucketName:
     Description: S3 bucket where downloaded CDR files (and debug screenshots) are stored
@@ -232,3 +391,6 @@ Outputs:
   CdrDownloaderLogGroupName:
     Description: CloudWatch Logs log group the function writes to
     Value: !Ref CdrDownloaderLogGroup
+  CdrDownloaderDashboardName:
+    Description: CloudWatch dashboard with the five monitoring metrics and alarm status
+    Value: !Ref CdrDownloaderDashboard

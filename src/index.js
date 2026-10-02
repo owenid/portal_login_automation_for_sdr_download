@@ -6,7 +6,8 @@ const { chromium: playwright } = require("playwright-core");
 
 const { config, requireEnv } = require("./config");
 const { getCredentials } = require("./secrets");
-const { uploadBuffer } = require("./s3");
+const { uploadBuffer, listObjects } = require("./s3");
+const { putMetric } = require("./metrics");
 
 /**
  * Stable error codes for every way a run can fail. The code leads the
@@ -19,11 +20,11 @@ const ERRORS = {
   BROWSER: { code: "CDR-E02", step: "Launching the headless browser" },
   LOGIN: { code: "CDR-E03", step: "Logging in to Gradwell SSO" },
   ADMIN: { code: "CDR-E04", step: "Opening the Admin home page" },
-  SDR_PAGE: { code: "CDR-E05", step: "Opening the SDR page" },
-  SDR_TABLE_MISSING: { code: "CDR-E06", step: "Opening the SDR page" },
-  END_DATE_MISSING: { code: "CDR-E07", step: "Checking the newest SDR period is published" },
-  END_DATE_UNPARSEABLE: { code: "CDR-E08", step: "Checking the newest SDR period is published" },
-  PERIOD_NOT_PUBLISHED: { code: "CDR-E09", step: "Checking the newest SDR period is published" },
+  CDR_PAGE: { code: "CDR-E05", step: "Opening the CDR page" },
+  CDR_TABLE_MISSING: { code: "CDR-E06", step: "Opening the CDR page" },
+  END_DATE_MISSING: { code: "CDR-E07", step: "Checking the newest CDR period is published" },
+  END_DATE_UNPARSEABLE: { code: "CDR-E08", step: "Checking the newest CDR period is published" },
+  PERIOD_NOT_PUBLISHED: { code: "CDR-E09", step: "Checking the newest CDR period is published" },
   DOWNLOAD: { code: "CDR-E10", step: "Downloading the CDR file" },
   S3_UPLOAD: { code: "CDR-E11", step: "Uploading the CDR file to S3" },
 };
@@ -31,7 +32,7 @@ const ERRORS = {
 /**
  * An automation failure that carries an error code and names the step that
  * failed and why, so the Lambda error (and CloudWatch/Datadog) reads e.g.
- * "[CDR-E06] Opening the SDR page failed: ... page message: "customer is
+ * "[CDR-E06] Opening the CDR page failed: ... page message: "customer is
  * required"" instead of a bare Playwright "Timeout 30000ms exceeded".
  */
 class AutomationError extends Error {
@@ -157,7 +158,7 @@ async function goToAdminHome(page) {
 }
 
 /**
- * Navigates to the SDR section.
+ * Navigates to the CDR page (CDR_URL).
  *
  * Every production invocation logged so far shows the SDR nav link's
  * locator resolving correctly (it's really there, id="menu-nav-partner-sdrs")
@@ -203,8 +204,8 @@ async function goToSdrSection(page) {
     );
   if (!tableLoaded) {
     throw new AutomationError(
-      ERRORS.SDR_TABLE_MISSING,
-      `the SDR table did not appear within ${config.navigationTimeoutMs / 1000}s (no element matched "${config.selectors.sdrTableRow}"). ${summarizePage(await describePage(page))}`
+      ERRORS.CDR_TABLE_MISSING,
+      `the CDR table did not appear within ${config.navigationTimeoutMs / 1000}s (no element matched "${config.selectors.sdrTableRow}"). ${summarizePage(await describePage(page))}`
     );
   }
 }
@@ -246,7 +247,7 @@ async function verifyLatestRecordIsAvailable(page) {
   } catch (err) {
     throw new AutomationError(
       ERRORS.END_DATE_MISSING,
-      `could not find the "End Date" cell of the newest SDR row (no element matched "${config.selectors.latestEndDateCell}" within ${config.navigationTimeoutMs / 1000}s) — the SDR table layout may differ from what's expected. ${summarizePage(await describePage(page))}`,
+      `could not find the "End Date" cell of the newest CDR row (no element matched "${config.selectors.latestEndDateCell}" within ${config.navigationTimeoutMs / 1000}s) — the CDR table layout may differ from what's expected. ${summarizePage(await describePage(page))}`,
       { cause: err }
     );
   }
@@ -257,7 +258,7 @@ async function verifyLatestRecordIsAvailable(page) {
   if (isNaN(endDate.getTime())) {
     throw new AutomationError(
       ERRORS.END_DATE_UNPARSEABLE,
-      `could not parse the newest SDR period's end date from "${cellText}" — the SDR table format may have changed.`
+      `could not parse the newest CDR period's end date from "${cellText}" — the CDR table format may have changed.`
     );
   }
 
@@ -265,7 +266,7 @@ async function verifyLatestRecordIsAvailable(page) {
   if (!isSameUtcCalendarDate(endDate, expected)) {
     throw new AutomationError(
       ERRORS.PERIOD_NOT_PUBLISHED,
-      `new CDR record not yet available: expected the newest SDR period to end ${expected.toISOString().slice(0, 10)} (last day of the previous month), but the newest row on the page ends ${endDate.toISOString().slice(0, 10)} ("${cellText}"). Gradwell likely hasn't published this month's CDR yet.`
+      `new CDR record not yet available: expected the newest CDR period to end ${expected.toISOString().slice(0, 10)} (last day of the previous month), but the newest row on the page ends ${endDate.toISOString().slice(0, 10)} ("${cellText}"). Gradwell likely hasn't published this month's CDR yet.`
     );
   }
 }
@@ -361,9 +362,35 @@ async function captureFailure(page, bucket, runId) {
   return result;
 }
 
-exports.handler = async () => {
+/**
+ * Monthly delivery check (MonthlyCdrDeliveryCheckSchedule, 10:30 UK time on
+ * the 1st): publishes DeliveryCheck = 1 if this month's cdr/<yyyy>/<mm>/
+ * prefix holds a file of at least minCdrFileBytes, otherwise 0. That catches
+ * the cases the Errors alarm can't see: a run that never started, and a
+ * "successful" run that saved a header-only file. Uses the same UTC
+ * year/month as buildS3Key().
+ */
+async function deliveryCheck(bucket) {
+  const now = new Date();
+  const prefix = `cdr/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/`;
+  const files = await listObjects(bucket, prefix);
+  const largest = files.reduce((max, f) => Math.max(max, f.size), 0);
+  const ok = largest >= config.minCdrFileBytes;
+  await putMetric("DeliveryCheck", ok ? 1 : 0, "Count");
+  console.log(
+    `CDR_DELIVERY_CHECK ${JSON.stringify({ prefix, files: files.length, largestBytes: largest, minBytes: config.minCdrFileBytes, ok })}`
+  );
+  return { statusCode: 200, mode: "deliveryCheck", prefix, files: files.length, largestBytes: largest, ok };
+}
+
+exports.handler = async (event = {}) => {
   const startedAt = Date.now();
   const bucket = requireEnv("CDR_BUCKET_NAME");
+
+  if (event && event.mode === "deliveryCheck") {
+    return deliveryCheck(bucket);
+  }
+
   const runId = crypto.randomUUID();
 
   let browser;
@@ -397,7 +424,7 @@ exports.handler = async () => {
     await runStep(page, ERRORS.ADMIN, () => goToAdminHome(page));
     await captureDebugScreenshot(page, bucket, runId, "02-admin-home");
 
-    await runStep(page, ERRORS.SDR_PAGE, () => goToSdrSection(page));
+    await runStep(page, ERRORS.CDR_PAGE, () => goToSdrSection(page));
     await captureDebugScreenshot(page, bucket, runId, "03-sdr-section");
 
     await runStep(page, ERRORS.END_DATE_MISSING, () =>
@@ -408,10 +435,13 @@ exports.handler = async () => {
     const key = buildS3Key(filename);
     await runStep(page, ERRORS.S3_UPLOAD, () => uploadBuffer(bucket, key, buffer));
 
+    await putMetric("FileSizeBytes", buffer.length, "Bytes");
+
     const durationMs = Date.now() - startedAt;
-    console.log(`CDR file uploaded to s3://${bucket}/${key} in ${durationMs}ms`);
-    return { statusCode: 200, bucket, key, durationMs };
+    console.log(`CDR file uploaded to s3://${bucket}/${key} (${buffer.length} bytes) in ${durationMs}ms`);
+    return { statusCode: 200, bucket, key, sizeBytes: buffer.length, durationMs };
   } catch (err) {
+    await putMetric("Failures", 1, "Count", [{ Name: "Code", Value: err.code || "CDR-E99" }]);
     const failure = await captureFailure(page, bucket, runId);
     const durationMs = Date.now() - startedAt;
     console.error(

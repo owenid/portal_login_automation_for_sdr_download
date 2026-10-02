@@ -74,6 +74,11 @@ const config = {
   // captured (screenshot + HTML to S3, screenshot to CloudWatch Logs)
   // regardless of this setting.
   debugScreenshots: env("DEBUG_SCREENSHOTS", "false") === "true",
+
+  // A downloaded CDR file smaller than this is treated as headers only. Used
+  // by the monthly delivery check; the template's file-too-small alarm uses
+  // the same value (the MinCdrFileBytes parameter).
+  minCdrFileBytes: Number(env("MIN_CDR_FILE_BYTES", "1024")),
 };
 
 module.exports = { config, env, requireEnv };
