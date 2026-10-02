@@ -9,8 +9,8 @@ Gradwell portal, and downloads the SDR CDR file into S3.
    username/password fields, and submits the login form.
 2. **Admin section** — clicks the "Admin" option, landing on
    `https://admin.prod.gradwell.com/home`.
-3. **SDR section** — clicks the "SDR" option, landing on
-   `https://admin.prod.gradwell.com/sdrs`.
+3. **CDR section** — opens `https://admin.prod.gradwell.com/cdrs` (the
+   `CDR_URL` setting).
 4. **Download** — clicks the download link/button on the SDR page, and
    uploads the resulting file to S3 at `cdr/<yyyy>/<mm>/<yyyy-mm-dd>-<filename>`.
 
@@ -34,7 +34,7 @@ change or redeploy needed:
 |------------------------------|---------------------------------------|-----------------------------------------------------------|
 | `SSO_URL`                   | SSO login page                        | `https://sso.prod.gradwell.com`                           |
 | `ADMIN_HOME_URL`             | Expected URL after choosing Admin     | `https://admin.prod.gradwell.com/home`                    |
-| `SDR_URL`                    | Expected URL after choosing SDR       | `https://admin.prod.gradwell.com/sdrs`                    |
+| `CDR_URL`                    | Page with the CDR/SDR table to download from | `https://admin.prod.gradwell.com/cdrs`              |
 | `SELECTOR_USERNAME_INPUT`   | Username field on the SSO page        | `input[name="username"], input[type="email"], #username` |
 | `SELECTOR_PASSWORD_INPUT`   | Password field on the SSO page        | `input[name="password"], input[type="password"], #password` |
 | `SELECTOR_LOGIN_BUTTON`     | Submit button on the SSO page         | `button[type="submit"], input[type="submit"]`             |

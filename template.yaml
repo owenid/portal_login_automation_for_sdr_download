@@ -129,7 +129,7 @@ Resources:
           CREDENTIALS_SECRET_ID: !Ref CredentialsSecretName
           SSO_URL: "https://sso.prod.gradwell.com"
           ADMIN_HOME_URL: "https://admin.prod.gradwell.com/home"
-          SDR_URL: "https://admin.prod.gradwell.com/sdrs"
+          CDR_URL: "https://admin.prod.gradwell.com/cdrs"
           DEBUG_SCREENSHOTS: !Ref DebugScreenshots
       Policies:
         - Statement:

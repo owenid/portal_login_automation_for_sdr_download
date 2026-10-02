@@ -396,7 +396,7 @@
 
         <rect x="678" y="312" width="320" height="50" rx="8" fill="var(--surface)" stroke="var(--external)" stroke-width="1" />
         <text x="838" y="331" text-anchor="middle" font-family="var(--font-sans)" font-size="12" font-weight="600" fill="var(--ink)">SDR list → verify + download latest</text>
-        <text x="838" y="347" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">admin.prod.gradwell.com/sdrs</text>
+        <text x="838" y="347" text-anchor="middle" font-family="var(--font-mono)" font-size="10" fill="var(--ink-muted)">admin.prod.gradwell.com/cdrs</text>
 
         <!-- 1st-of-month freshness check annotation -->
         <text x="838" y="380" text-anchor="middle" font-family="var(--font-sans)" font-size="10" font-weight="600" fill="var(--security)">1st of month only: newest period not yet published</text>
@@ -521,7 +521,7 @@
           reached over the public internet. The Lambda logs in at
           <code>sso.prod.gradwell.com</code>, lands on
           <code>admin.prod.gradwell.com/home</code>, then
-          <code>/sdrs</code>, where a table sorted newest-first lists each
+          <code>/cdrs</code>, where a table sorted newest-first lists each
           billing period. On the 1st of the month it first confirms the
           newest row's End Date is the last day of the previous month — the
           period that should have just completed — and throws an error
@@ -897,9 +897,9 @@
           <span class="role-tag role-external">Gradwell Admin</span>
         </div>
         <div class="component-desc">
-          Navigating to <code>/sdrs</code> itself failed (timeout or network error) before any table check.
+          Navigating to <code>/cdrs</code> itself failed (timeout or network error) before any table check.
           <span class="err-msg">[CDR-E05] Opening the SDR page failed: &lt;reason&gt;. Page URL: …</span>
-          <div class="err-fix"><strong>What to do:</strong> Re-run; if it repeats, check the portal is up and the <code>SDR_URL</code> setting.</div>
+          <div class="err-fix"><strong>What to do:</strong> Re-run; if it repeats, check the portal is up and the <code>CDR_URL</code> setting.</div>
         </div>
       </div>
       <div class="component">
